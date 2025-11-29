@@ -2,11 +2,9 @@
 # 上海市垃圾分类处理。
 
 # Preparation ----
-library(tidyverse)
-library(patchwork)
-library(ggplot2)
-library(corrplot)
-library(showtext)
+pacman::p_load(
+  dplyr, patchwork, ggplot2, corrplot, showtext
+)
 showtext::showtext_auto()
 
 # Data ----
@@ -206,9 +204,7 @@ lapply(ws_23[, c(
   "num_family")],
   table, useNA = "ifany")
 
-##23家庭人数柱状图
-library(ggplot2)
-
+# 23家庭人数柱状图
 ggplot(ws_23, aes(x = factor(num_family))) +
   geom_bar(fill = "skyblue", color = "black") +
   labs(x = "家庭人数", y = "频数", title = "家庭人数的分布") +
