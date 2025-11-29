@@ -1,69 +1,83 @@
 library(tidyverse)
 library(readxl)
 
-# 定义年份和文件路径。
-years <- 2019:2023
+# 读取列名对应表
+colname_mapping <- read_excel("data_raw/colname_mapping.xlsx")
 
-# 批量读取和处理所有年份数据。
+# 创建列名重命名函数
+create_rename_vector <- function(mapping_df, year) {
+  col_year <- paste0("col_", year)
+  mapping_year <- mapping_df %>%
+    filter(!is.na(.data[[col_year]])) %>%
+    select(old_name = all_of(col_year), new_name = unified_name_en)
+  setNames(mapping_year$old_name, mapping_year$new_name)
+}
+
+# 批量读取数据
+years <- 2019:2023
 ws_list <- map2(
   paste0("data_raw/SHWS", years, ".xlsx"), 
-  paste0("data_proc/namelist", substr(years, 3, 4), ".csv"), 
-  function(file, namelist_file) {
-    # 读取列名映射表。
-    namelist <- read_csv(namelist_file, show_col_types = FALSE)
-    
-    # 读取数据并统一列名，替换缺失值为NA
-    read_excel(file)
-      # rename_with(~namelist$new_name) 
+  years, 
+  function(file, year) {
+    read_excel(file) %>%
+      rename(any_of(create_rename_vector(colname_mapping, year))) %>% 
+      mutate(year = as.factor(year))
   }
 )
 
-# 添加年份变量
-ws_list <- map2(ws_list, years, ~mutate(.x, year = as.factor(.y)))
+# 所有需要重编码的变量（合并为一个向量）
+vars_2019_recode <- c(
+  # 信息质量 (11个)
+  "info_qual_tv", "info_qual_news", "info_qual_web", "info_qual_ad", 
+  "info_qual_gov", "info_qual_school", "info_qual_street", 
+  "info_qual_volunteer", "info_qual_neighbor", "info_qual_family", 
+  "info_qual_property",
+  # 联系频率 (10个)
+  "freq_online_secondhand", "freq_gov", "freq_ngo", "freq_media", 
+  "freq_school", "freq_waste_co", "freq_resident", "freq_street", 
+  "freq_property", "freq_supervisor",
+  # 部门作用 (9个)
+  "role_gov", "role_ngo", "role_media", "role_school", "role_waste_co",
+  "role_resident", "role_street", "role_property", "role_supervisor",
+  # 部门支持 (9个)
+  "support_gov", "support_ngo", "support_media", "support_school",
+  "support_waste_co", "support_resident", "support_street", 
+  "support_property", "support_supervisor"
+)
 
-# ============================================================================
-# 生成两个数据框
-# ============================================================================
-
-# 1. 包含所有年份所有变量的完整数据框（全外连接）
-ws_full <- bind_rows(ws_list) 
-  select(-batch)  # 移除批次标识列
-
-# 2. 找出所有年份的共有变量
-share_colname <- reduce(map(ws_list, colnames), intersect)
-
-# 只包含共有变量的数据框
-ws_all <- map(ws_list, ~select(.x, all_of(share_colname))) %>%
-  bind_rows()
-
-# ============================================================================
-# 输出信息
-# ============================================================================
-
-cat("✓ 数据处理完成\n")
-cat("  - 共有变量数量:", length(share_colname), "\n")
-cat("  - 完整数据框 (ws_full) 维度:", paste(dim(ws_full), collapse = " × "), "\n")
-cat("  - 共有变量数据框 (ws_all) 维度:", paste(dim(ws_all), collapse = " × "), "\n")
-cat("  - 总样本量:", nrow(ws_all), "\n\n")
-
-# 查看共有变量列表（可选）
-cat("共有变量列表:\n")
-print(share_colname)
-
-# ============================================================================
-# 可选：查看23年特定变量分布（示例）
-# ============================================================================
-
-# 如果需要查看特定年份的变量分布
-ws_23 <- ws_list[[5]]  # 2023年数据
-
-check_vars <- c("transac_secondhand", "freq_online_secondhand", 
-                "sens_of_oblg", "volun_expr", "sort_self", "put_self")
-
-# 检查变量是否存在
-check_vars_exist <- check_vars[check_vars %in% colnames(ws_23)]
-
-if(length(check_vars_exist) > 0) {
-  cat("\n2023年变量分布:\n")
-  lapply(ws_23[, check_vars_exist], table, useNA = "ifany")
+# 通用重编码函数：a→1, b→2, c→3, d→4, e→5, -3→NA
+recode_2019_letters <- function(x) {
+  case_when(
+    str_detect(x, "^a") ~ 1,  # 以a开头的任何字符串 → 1
+    str_detect(x, "^b") ~ 2,  # 以b开头的任何字符串 → 2
+    str_detect(x, "^c") ~ 3,  # 以c开头的任何字符串 → 3
+    str_detect(x, "^d") ~ 4,  # 以d开头的任何字符串 → 4
+    str_detect(x, "^e") ~ 5,  # 以e开头的任何字符串 → 5
+    x == "-3" | x == -3 ~ NA_real_,  # -3 → NA
+    TRUE ~ as.numeric(x)      # 其他情况转为数字（如果已经是数字）
+  )
 }
+
+# 一次性处理所有变量。
+ws_list[[1]] <- ws_list[[1]] %>%
+  mutate(across(any_of(vars_2019_recode), recode_2019_letters))
+
+# 处理其他有问题的变量。
+# 老人数量。
+# Bug：还要删除异常值。
+ws_list[[2]] <- ws_list[[2]] %>% 
+  mutate(across(any_of("elder_num"), as.numeric))
+ws_list[[4]] <- ws_list[[4]] %>% 
+  mutate(across(any_of("elder_num"), as.numeric))
+ws_list[[5]] <- ws_list[[5]] %>% 
+  mutate(across(any_of("elder_num"), as.numeric))
+# 年龄。
+ws_list[[4]] <- ws_list[[4]] %>% 
+  mutate(across(any_of("age"), as.numeric))
+
+# 生成完整数据框
+ws_full <- bind_rows(ws_list)
+
+# 生成共有变量数据框
+share_colname <- reduce(map(ws_list, colnames), intersect)
+ws_all <- bind_rows(map(ws_list, ~select(.x, all_of(share_colname))))
