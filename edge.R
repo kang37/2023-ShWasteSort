@@ -1,6 +1,13 @@
-library(tidyverse)
-library(readxl)
+# Statement ----
+# 上海市垃圾分类处理。
 
+# Preparation ----
+pacman::p_load(
+  dplyr, patchwork, ggplot2, corrplot, readxl, showtext
+)
+showtext::showtext_auto()
+
+# Data ----
 # 读取列名对应表
 colname_mapping <- read_excel("data_raw/colname_mapping.xlsx")
 
@@ -75,9 +82,6 @@ ws_list[[5]] <- ws_list[[5]] %>%
 ws_list[[4]] <- ws_list[[4]] %>% 
   mutate(across(any_of("age"), as.numeric))
 
-# 生成完整数据框
+# 生成完整数据框。
 ws_full <- bind_rows(ws_list)
 
-# 生成共有变量数据框
-share_colname <- reduce(map(ws_list, colnames), intersect)
-ws_all <- bind_rows(map(ws_list, ~select(.x, all_of(share_colname))))
