@@ -83,5 +83,108 @@ ws_list[[4]] <- ws_list[[4]] %>%
   mutate(across(any_of("age"), as.numeric))
 
 # 生成完整数据框。
+# Bug：有些NA值需要去除，如性别中的“-2”。
 ws_full <- bind_rows(ws_list)
+
+# 用于作图的数据框：加入选项内容。
+ws_full_text <- ws_full %>% 
+  mutate(
+    gender = case_match(gender, 1 ~ "male", 2 ~ "female"), 
+    education = case_match(
+      education, 
+      1 ~ "primary", 2 ~ "junior_high", 3 ~ "senior_high", 
+      c(4, 5) ~ "college_or_higher", 6 ~ "edu_other"
+    ), 
+    occupation = case_match(
+      occupation, 
+      1 ~ "government", 2 ~ "institution", 3 ~ "state_enterprise", 
+      4 ~ "foreign_enterprise", 5 ~ "private_enterprise", 6 ~ "self_employed", 
+      7 ~ "freelancer", 8 ~ "retired", 9 ~ "student", 10 ~ "occ_other"
+    ), 
+    residence_area = case_match(
+      residence_area, 
+      1 ~ "Pudong", 2 ~ "Huangpu", 3 ~ "Xuhui", 4 ~ "Changning", 
+      5 ~ "Jing'an", 6 ~ "Putuo", 7 ~ "Hongkou", 8 ~ "Yangpu", 
+      9 ~ "Minhang", 10 ~ "Baoshan", 11 ~ "Jiading", 12 ~ "Jinshan", 
+      13 ~ "Songjiang", 14 ~ "Qingpu", 15 ~ "Fengxian", 16 ~ "Chongming"
+    ), 
+    income = case_match(
+      income, 
+      1 ~ "≤ 3", 2 ~ "3~5", 3 ~ "5~10", 4 ~ "10~15", 
+      5 ~ "15~20", 6 ~ "20~30", 7 ~ "> 30"
+    )
+  )
+
+
+# General description ----
+# 获取所有变量的原始顺序向量。
+order_levels <- list(
+  gender = c("male", "female"),
+  education = c("primary", "junior_high", "senior_high", "college_or_higher", "edu_other"),
+  occupation = c("government", "institution", "state_enterprise", "foreign_enterprise", "private_enterprise", "self_employed", "freelancer", "retired", "student", "occ_other"),
+  income = c("≤ 3", "3~5", "5~10", "10~15", "15~20", "20~30", "> 30")
+) %>% 
+  # 将所有可能的分类合并成一个总的顺序向量
+  unlist(., use.names = FALSE)
+
+# --- 2. 数据处理：计算百分比和多年平均值 (列名改为小写) ---
+gene_des_proc <- ws_full_text %>%  
+  pivot_longer(
+    cols = c(gender, education, occupation, income),
+    names_to = "variable", # 列名小写
+    values_to = "category" # 列名小写
+  ) %>%
+  # 计数并计算年度百分比
+  count(year, variable, category, name = "count") %>% # n改为count
+  group_by(year, variable) %>%
+  mutate(
+    percentage = count / sum(count), # 列名小写
+    label = scales::percent(percentage, accuracy = 2) 
+  ) %>%
+  ungroup()
+
+# --- 3. 计算多年平均值并合并到数据中 ---
+gene_des_avg <- gene_des_proc %>%
+  group_by(variable, category) %>%
+  summarise(
+    percentage = mean(percentage), # 计算多年平均百分比
+    label = scales::percent(percentage, accuracy = 2),
+    .groups = 'drop'
+  ) %>%
+  mutate(
+    year = "Average", # 设置 year 为 'Average'，作为新的 x 轴刻度
+    count = NA_integer_ # 填充 NA
+  )
+
+# 合并年度数据和平均数据
+bind_rows(gene_des_proc, gene_des_avg) %>% 
+  # 4. Y轴排序：将 category 转换为因子，并应用预先设定的顺序
+  mutate(category = factor(category, levels = rev(order_levels))) %>% 
+  # 作图。
+  ggplot(aes(x = factor(year), y = category, fill = percentage)) + 
+  geom_tile(color = "white") + # 添加白色边框，增强区分度
+  geom_text(aes(label = label), color = "white", size = 3) +
+  facet_wrap(.~ variable, scales = "free_y", ncol = 2) + 
+  scale_fill_gradient(high = "red", low = "darkgreen") +
+  labs(y = "Category", fill = "Percentage") +
+  theme_minimal() +
+  theme(
+    legend.position = "bottom",
+    axis.text.y = element_text(size = 8),
+    strip.text = element_text(face = "bold")
+  )
+
+# 输出表格。
+bind_rows(gene_des_proc, gene_des_avg) %>%
+  select(variable, category, year, percentage) %>% 
+  pivot_wider(names_from = year, values_from = percentage) %>%
+  # 如果需要进行后续计算，请跳过此步骤
+  mutate(
+    across(
+      .cols = where(is.numeric), .fns = ~ scales::percent(.x, accuracy = 0.01) 
+    )
+  ) %>% 
+  mutate(category = factor(category, levels = order_levels)) %>% 
+  arrange(category) %>% 
+  write.csv("data_proc/gene_des_table.csv")
 
