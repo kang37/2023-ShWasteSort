@@ -84,7 +84,26 @@ ws_list[[4]] <- ws_list[[4]] %>%
 
 # 生成完整数据框。
 # Bug：有些NA值需要去除，如性别中的“-2”。
-ws_full <- bind_rows(ws_list)
+ws_full <- bind_rows(ws_list) %>% 
+  # 对部分李克特变量进行反向编码：原1-5变成5-1。
+  mutate(
+    across(
+      .cols = all_of(
+        colname_mapping %>%
+          filter(var_scale5_rev == 1) %>%
+          pull(unified_name_en) 
+      ), 
+      .fns = ~ {
+        # 确保列是数值型，否则反转公式无效
+        x <- as.numeric(.x) 
+        # 反转公式：max_value + 1 - x
+        # 1 -> 5+1-1 = 5
+        # 5 -> 5+1-5 = 1
+        # NA -> 5+1-NA = NA
+        5 + 1 - x
+      }
+    )
+  )
 
 # 用于作图的数据框：加入选项内容。
 ws_full_text <- ws_full %>% 
@@ -114,7 +133,6 @@ ws_full_text <- ws_full %>%
       5 ~ "15~20", 6 ~ "20~30", 7 ~ "> 30"
     )
   )
-
 
 # General description ----
 # 获取所有变量的原始顺序向量。
