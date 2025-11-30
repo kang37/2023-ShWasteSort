@@ -3,7 +3,7 @@
 
 # Preparation ----
 pacman::p_load(
-  dplyr, patchwork, ggplot2, corrplot, readxl, showtext
+  dplyr, tidyr, patchwork, ggplot2, corrplot, readxl, showtext
 )
 showtext::showtext_auto()
 
@@ -210,9 +210,28 @@ bind_rows(gene_des_proc, gene_des_avg) %>%
 # 目标变量列表
 target_vars <- c("wil_of_engage", "willing_share", "seper_recyc", "share_often")
 
-# --- 1. 修正后的函数：返回一个整洁的 data.frame ---
+# 目标变量概况。
+ws_full %>% 
+  select("year", target_vars) %>% 
+  pivot_longer(
+    cols = all_of(target_vars), names_to = "question", values_to = "reply"
+  ) %>% 
+  group_by(year, question, reply) %>% 
+  summarise(n = n(), .groups = "drop") %>% 
+  mutate(question = factor(question, levels = target_vars)) %>% 
+  ggplot() + 
+  geom_col(aes(year, n, fill = as.character(reply)), position = "fill") +
+  scale_fill_brewer(palette = "RdYlBu", direction = -1) + 
+  theme_bw() + 
+  facet_wrap(. ~ question) + 
+  labs(fill = "Likert scale", x = NULL, y = "Proportion") + 
+  theme(
+    strip.text = element_text(size = 9),
+    panel.grid.minor = element_blank()
+  )
+
+# 函数：返回一个整洁的data.frame。
 calculate_and_tidy_cor <- function(data_subset) {
-  
   # 1. 提取目标变量并转换为矩阵
   cor_data <- data_subset %>% select(all_of(target_vars))
   
@@ -264,7 +283,7 @@ calculate_and_tidy_cor <- function(data_subset) {
   return(tidy_cor_table)
 }
 
-# --- 2. 应用函数并生成最终数据框 ---
+# 应用函数并生成最终数据框。
 final_correlation_data <- ws_full %>%
   # 嵌套数据：按 'year' 分组
   group_by(year) %>%
@@ -284,9 +303,8 @@ final_correlation_data <- ws_full %>%
   ) %>%
   select(year, Pair, R_value, P_value, P_value_formatted)
 
-# --- 3. 结果输出 ---
+# 结果输出。
 # 表格输出
-# 选择所需的列并打印
 correlation_table <- final_correlation_data %>%
   select(
     Year = year,
