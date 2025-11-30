@@ -206,3 +206,144 @@ bind_rows(gene_des_proc, gene_des_avg) %>%
   arrange(category) %>% 
   write.csv("data_proc/gene_des_table.csv")
 
+# Correlation ----
+# 目标变量列表
+target_vars <- c("wil_of_engage", "willing_share", "seper_recyc", "share_often")
+
+# --- 1. 修正后的函数：返回一个整洁的 data.frame ---
+calculate_and_tidy_cor <- function(data_subset) {
+  
+  # 1. 提取目标变量并转换为矩阵
+  cor_data <- data_subset %>% select(all_of(target_vars))
+  
+  if(nrow(cor_data) < 2) {
+    return(tibble(Var1 = character(), Var2 = character(), r = numeric(), P = numeric()))
+  }
+  
+  # 2. 计算相关矩阵
+  cor_res <- rcorr(as.matrix(cor_data), type = "spearman")
+  
+  # 3. 将 R 值和 P 值转换为 data.frame，然后进行整洁化
+  
+  # R 值矩阵转为长格式
+  r_tidy <- cor_res$r %>% 
+    as.data.frame() %>% 
+    tibble::rownames_to_column(var = "Var1") %>%
+    pivot_longer(
+      cols = -Var1, 
+      names_to = "Var2", 
+      values_to = "R_value"
+    )
+  
+  # P 值矩阵转为长格式
+  p_tidy <- cor_res$P %>% 
+    as.data.frame() %>% 
+    tibble::rownames_to_column(var = "Var1") %>%
+    pivot_longer(
+      cols = -Var1, 
+      names_to = "Var2", 
+      values_to = "P_value"
+    )
+  
+  # 合并 R 值和 P 值
+  tidy_cor_table <- left_join(r_tidy, p_tidy, by = c("Var1", "Var2")) %>%
+    
+    # 筛选：移除对角线 (自己和自己相关) 和重复的配对 (只保留 Var1 < Var2)
+    filter(Var1 != Var2, Var1 < Var2) %>% 
+    
+    # 格式化 P 值 (使用科学记数法)
+    mutate(
+      P_value_formatted = format.pval(
+        P_value, 
+        digits = 3, 
+        eps = 1e-15, 
+        scientific = TRUE
+      )
+    )
+  
+  return(tidy_cor_table)
+}
+
+# --- 2. 应用函数并生成最终数据框 ---
+final_correlation_data <- ws_full %>%
+  # 嵌套数据：按 'year' 分组
+  group_by(year) %>%
+  nest() %>%
+  
+  # 应用函数：对每个年份的数据子集应用函数，并生成新的 'tidy_cor' 列
+  mutate(
+    tidy_cor = map(data, calculate_and_tidy_cor)
+  ) %>%
+  
+  # 展开：将嵌套的 'tidy_cor' data.frame 展开到主数据框中
+  unnest(tidy_cor) %>%
+  
+  # 创建一个配对标识符，用于绘图分组
+  mutate(
+    Pair = paste(Var1, Var2, sep = " ~ ")
+  ) %>%
+  select(year, Pair, R_value, P_value, P_value_formatted)
+
+# --- 3. 结果输出 ---
+# 表格输出
+# 选择所需的列并打印
+correlation_table <- final_correlation_data %>%
+  select(
+    Year = year,
+    Variable_Pair = Pair,
+    Correlation_R = R_value,
+    P_value_Text = P_value_formatted
+  ) %>%
+  arrange(Year, Variable_Pair)
+# 相关结果表格。
+print(correlation_table)
+
+# 转化成宽表格。
+# 增加函数：根据 p 值生成星号
+get_stars <- function(p_value) {
+  # 按照您的要求设置显著性分级
+  if (is.na(p_value)) {
+    return("")
+  } else if (p_value < 0.001) {
+    return("***")
+  } else if (p_value < 0.01) {
+    return("**")
+  } else if (p_value < 0.05) {
+    return("*")
+  } else {
+    return("") # 不显著时不显示星号
+  }
+}
+final_correlation_data %>%
+  # 1. 计算星号标记
+  mutate(
+    # 应用自定义函数生成星号列
+    Significance_Stars = map_chr(P_value, get_stars),
+    # 2. 合并 R 值和星号：将 R 值四舍五入到两位小数并拼接星号
+    R_with_Stars = paste0(round(R_value, 2), Significance_Stars)
+  ) %>%
+  # 3. 准备 pivot_wider
+  select(year, Pair, R_with_Stars) %>%
+  # 4. 转换为宽表格：将年份作为新的列名
+  pivot_wider(
+    names_from = year,
+    values_from = R_with_Stars
+  ) %>%
+  # 5. 重命名列以提高可读性
+  rename(Variable_Pair = Pair)
+
+# 折线图输出。
+ggplot(
+  final_correlation_data, 
+  aes(x = year, y = R_value, group = Pair)
+) +
+  geom_line() +
+  geom_point(size = 2) +
+  # 添加零线作为参考
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  labs(
+    x = "年份 (Year)", y = "斯皮尔曼相关系数 (Rho)"
+  ) +
+  facet_wrap(.~ Pair) + 
+  theme_bw() + 
+  theme(legend.position = "bottom")
