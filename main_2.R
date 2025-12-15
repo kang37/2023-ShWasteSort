@@ -3,7 +3,7 @@
 
 # Preparation ----
 pacman::p_load(
-  dplyr, tidyr, patchwork, ggplot2, corrplot, readxl, showtext
+  dplyr, tidyr, patchwork, ggplot2, corrplot, readxl, purrr, showtext
 )
 showtext::showtext_auto()
 
@@ -103,6 +103,26 @@ ws_full <- bind_rows(ws_list) %>%
         5 + 1 - x
       }
     )
+  ) %>% 
+  mutate(
+    # 转化性别数据类型。
+    gender = case_when(gender == "-2" ~ NA, TRUE ~ gender), 
+    gender = as.factor(gender), 
+    # 新增分组形式年龄变量。
+    age_grp = case_when(
+      age <= 25 ~ "<=25", age <= 40 ~ "25~40", age <= 60 ~ "40_60", 
+      age <= 100 ~ ">60", age >= 100 ~ NA
+    ), 
+    age_grp = factor(age_grp, levels = c("<=25", "25~40", "40_60", ">60")), 
+    # 新增教育水平分组。
+    # Bug: education本身是否转化成factor？
+    education_grp = case_when(
+      education <= 3 ~ "under_senior", education == 4 ~ "undergrad", 
+      education == 5 ~ "beyond_master", education == 6 ~ NA
+    ), 
+    education_grp = factor(education_grp, levels = c(
+      "under_senior", "undergrad", "beyond_master"
+    ))
   )
 
 # 用于作图的数据框：加入选项内容。
@@ -365,3 +385,79 @@ ggplot(
   facet_wrap(.~ Pair) + 
   theme_bw() + 
   theme(legend.position = "bottom")
+
+# Group difference ----
+# 不同性别、年龄、职业人群分类意愿和分类行为差异。
+# 函数：统计检验不同分组之间的变量差异。
+comp_var <- function(var_x, var_y) {
+  lapply(
+    2019:2023, 
+    function(x) {
+      # 统计分析：根据自变量水平数选择分析方法。
+      if(length(levels(ws_full[var_x])) == 2) {
+        res <- wilcox.test(
+          get(var_y) ~ get(var_x), data = ws_full %>% filter(year == x)
+        )
+      } else {
+        res <- kruskal.test(
+          get(var_y) ~ get(var_x), data = ws_full %>% filter(year == x)
+        )
+      }
+      # 输出所需结果。
+      data.frame(year = x, statistic = res$statistic, p = res$p.value)
+    }
+  ) %>% 
+    bind_rows() %>% 
+    mutate(p_sig = case_when(
+      p < 0.001 ~ "***", p < 0.01 ~ "**", p < 0.05 ~ "*", p >= 0.05 ~ ""
+    ))
+}
+
+# 不同分组之间意愿差异。
+comp_var("gender", "wil_of_engage")
+comp_var("age_grp", "wil_of_engage")
+comp_var("education_grp", "wil_of_engage")
+# 不同分组之间行为差异。
+comp_var("gender", "seper_recyc")
+comp_var("age_grp", "seper_recyc")
+comp_var("education_grp", "seper_recyc")
+
+# 函数：计算各组人员中位数等指标。
+calc_mid <- function(var_x, var_y) {
+  # 将字符串参数转换为符号，以便使用{{ }}引用。
+  var_x_sym <- sym(var_x) 
+  var_y_sym <- sym(var_y)
+  # 计算各年份各组中位数和平均秩次。
+  res <- ws_full %>%
+    # 去掉NA值的行。
+    filter(!is.na({{ var_x_sym }})) %>% 
+    # 计算总秩次。
+    group_by(year) %>% 
+    # 使用 {{ var_y_sym }} 确保在 mutate 中正确引用变量
+    mutate(global_rank = rank({{ var_y_sym }}) ) %>% 
+    ungroup() %>% 
+    # 计算各年份各组中位数和平均秩次。
+    group_by(year, {{ var_x_sym }}) %>% 
+    summarise(
+      mid = median({{ var_y_sym }}, na.rm = TRUE), 
+      mean_rank = mean(global_rank, na.rm = TRUE),
+      .groups = "drop"
+    )
+  print(
+    ggplot(res) + 
+      geom_point(
+        aes(year, mean_rank, col = {{ var_x_sym }}), alpha = 0.8, size = 3
+      )
+  )
+  return(res)
+}
+# 意愿差异。
+lapply(
+  c("gender", "age_grp", "education_grp"), 
+  function(x) calc_mid(x, "wil_of_engage")
+) 
+# 行为差异。
+lapply(
+  c("gender", "age_grp", "education_grp"), 
+  function(x) calc_mid(x, "seper_recyc")
+) 
