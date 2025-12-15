@@ -391,7 +391,7 @@ get_cor <- function(var_x, var_y) {
   lapply(
     2019:2023, 
     function(x) {
-      # 将字符转化为符号，方便饮用。
+      # 将字符转化为符号，方便引用。
       var_x_sym <- sym(var_x)
       var_y_sym <- sym(var_y)
       # 提取目标子数据集。
@@ -402,6 +402,7 @@ get_cor <- function(var_x, var_y) {
           cor.test(tar_df[[var_x]], tar_df[[var_y]], method = "kendall")
         res <- data.frame(
           year = x, var_x = var_x, var_y = var_y, 
+          tau = res_stat$estimate, 
           statistic = res_stat$statistic, p = res_stat$p.value
         ) 
       } else {
