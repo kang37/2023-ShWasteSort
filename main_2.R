@@ -324,7 +324,6 @@ final_correlation_data <- ws_full %>%
   select(year, Pair, R_value, P_value, P_value_formatted)
 
 # 结果输出。
-# 表格输出
 correlation_table <- final_correlation_data %>%
   select(
     Year = year,
@@ -385,6 +384,46 @@ ggplot(
   facet_wrap(.~ Pair) + 
   theme_bw() + 
   theme(legend.position = "bottom")
+
+# Spill over ----
+# 函数：逐年检测两个变量之间的相关性。
+get_cor <- function(var_x, var_y) {
+  lapply(
+    2019:2023, 
+    function(x) {
+      # 将字符转化为符号，方便饮用。
+      var_x_sym <- sym(var_x)
+      var_y_sym <- sym(var_y)
+      # 提取目标子数据集。
+      tar_df <- ws_full %>% 
+        filter(year == x, !is.na({{ var_x_sym }}), !is.na({{ var_y_sym }}))
+      if(nrow(tar_df) > 0) {
+        res_stat <- 
+          cor.test(tar_df[[var_x]], tar_df[[var_y]], method = "kendall")
+        res <- data.frame(
+          year = x, var_x = var_x, var_y = var_y, 
+          statistic = res_stat$statistic, p = res_stat$p.value
+        ) 
+      } else {
+        res <- NULL
+      }
+      return(res)
+    }
+  ) %>% 
+    bind_rows() %>% 
+    mutate(p_sig = case_when(
+      p < 0.001 ~ "***", p < 0.01 ~ "**", p < 0.05 ~ "*", p >= 0.05 ~ ""
+    ))
+}
+# 检测环保行为之间的关系。
+lapply(
+  c("reuse_bag", "energy_concern", "save_energy", "share_often"), 
+  function(x) get_cor("wil_of_engage", x)
+) 
+lapply(
+  c("reuse_bag", "energy_concern", "save_energy", "share_often"), 
+  function(x) get_cor("seper_recyc", x)
+) 
 
 # Group difference ----
 # 不同性别、年龄、职业人群分类意愿和分类行为差异。
