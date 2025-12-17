@@ -3,7 +3,7 @@
 # ============================================================================
 
 # 加载必要的包 ----
-library(tidyverse)
+# library(tidyverse)
 library(lavaan)
 library(ggplot2)
 
@@ -87,39 +87,37 @@ print(table(ws_all$year))
 # 定义TPB结构方程模型
 tpb_sem_model <- '
   # 测量模型
-  ATT =~ satis_way_of_commu + satis_way_of_sh + atti_WS_rev + scal_threat
-  SN  =~ scal_pr_atten + scal_guilty + scal_law + scal_commu_rule + 
-         scal_nb_WS + scal_family_WS
-  PBC =~ scal_know_sort + scal_sign_sort + scal_kind_trouble + scal_t_trouble
+  ATT =~ satis_way_of_commu + satis_way_of_sh + ws_attitude + threat
+  SN  =~ pr_atten + if_no_ws_guilty + regulate_law + regulate_commu_rule + 
+         if_neighbor_ws + if_family_ws
+  PBC =~ if_know_method + if_sign_sort + category_trouble + time_cost_troub
 
   # 结构路径
   wil_of_engage ~ ATT + SN + PBC
   seper_recyc ~ wil_of_engage
-
+  
   # 局部误差协方差
   satis_way_of_commu ~~ satis_way_of_sh
-  scal_kind_trouble ~~ scal_t_trouble
-  scal_nb_WS ~~ scal_family_WS
+  category_trouble ~~ time_cost_troub
+  if_neighbor_ws ~~ if_family_ws
 '
 
 # 定义有序变量
 ordered_vars <- c(
-  "scal_threat", "scal_no_my_busi", "scal_know_sort", "scal_sign_sort",
-  "scal_tidy_sort", "scal_near_sort", "scal_kind_trouble", "scal_t_trouble",
-  "scal_pr_atten", "scal_guilty", "scal_law", "scal_commu_rule", "scal_fine",
-  "scal_nb_WS", "scal_family_WS", "satis_way_of_commu", "satis_way_of_sh",
-  "atti_WS_rev", "seper_recyc", "wil_of_engage"
+  "satis_way_of_commu", "satis_way_of_sh", 
+  "ws_attitude", "threat", "pr_atten", "if_no_ws_guilty", "regulate_law", "regulate_commu_rule", "if_neighbor_ws", "if_family_ws", "if_know_method", "if_sign_sort", "category_trouble", "time_cost_troub", "wil_of_engage"
 )
 
 # 拟合多组SEM（配置不变性模型）
 fit_sem <- sem(
   model = tpb_sem_model,
-  data = ws_all,
+  data = ws_full,
   group = "year",
   estimator = "WLSMV",
   ordered = ordered_vars,
   parameterization = "theta"
 )
+lavInspect(fit_sem, "cor.lv")
 
 # 查看拟合指数
 fit_indices <- fitMeasures(fit_sem, c("chisq", "df", "pvalue", "cfi", 
@@ -145,9 +143,6 @@ path_results$year <- year_labels[path_results$group]
 # 显示结果
 cat("\n各年份路径系数:\n")
 print(path_results %>% select(year, lhs, rhs, std.all, pvalue))
-
-# 保存为CSV
-# write.csv(path_results, "path_coefficients_by_year.csv", row.names = FALSE)
 
 # ============================================================================
 # 绘制路径系数随年份变化图 ----
@@ -189,23 +184,29 @@ plot_data <- path_results %>%
     "Perceived Control → Intention",
     "Intention → Behavior"
   )))
+
+
 ggplot(plot_data, aes(x = year_num, y = std.all)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
+  geom_hline(
+    yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4
+  ) +
   geom_line(linewidth = 0.9, color = "grey") +
   geom_point(aes(fill = Significant, shape = Significant),
              size = 3.5, stroke = 1) +
   facet_wrap(~ Path_full, nrow = 1) +
   scale_x_continuous(breaks = 2019:2023) +
-  scale_shape_manual(values = c("Significant (p < 0.05)" = 21, "Not significant" = 21)) +
+  scale_shape_manual(
+    values = c("Significant (p < 0.05)" = 21, "Not significant" = 21)
+  ) +
   scale_fill_manual(values = c("Significant (p < 0.05)" = "black", "Not significant" = "white")) +
   labs(
-    title = "TPB Path Coefficients Over Time (2019-2023)",
-    x = "Year",
-    y = "Standardized Coefficient (β)"
+    x = "Year", y = "Standardized Coefficient (β)"
   ) +
   theme_classic(base_size = 10) +
   theme(
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 13, margin = margin(b = 10)),
+    plot.title = element_text(
+      hjust = 0.5, face = "bold", size = 13, margin = margin(b = 10)
+    ),
     strip.background = element_rect(fill = "gray85", color = "gray50"),
     # strip.text = element_text(face = "bold", size = 10),
     legend.position = "bottom",
