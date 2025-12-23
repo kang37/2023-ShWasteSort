@@ -3,7 +3,7 @@
 
 # Preparation ----
 pacman::p_load(
-  dplyr, tidyr, patchwork, ggplot2, corrplot, readxl, purrr, showtext
+  dplyr, stringr, tidyr, patchwork, ggplot2, corrplot, readxl, purrr, showtext
 )
 showtext::showtext_auto()
 
@@ -26,6 +26,7 @@ ws_list <- map2(
   paste0("data_raw/SHWS", years, ".xlsx"), 
   years, 
   function(file, year) {
+    print(year)
     read_excel(file) %>%
       rename(any_of(create_rename_vector(colname_mapping, year))) %>% 
       mutate(year = as.factor(year))
