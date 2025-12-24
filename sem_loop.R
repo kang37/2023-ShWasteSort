@@ -56,15 +56,15 @@ att_combinations <- generate_combinations(att_candidates, min_size = 2)
 pbc_combinations <- generate_combinations(pbc_candidates, min_size = 2)
 sn_combinations <- generate_combinations(sn_candidates, min_size = 2)
 
-# 或更改配置：ATT2-3个观测变量，PBC3-4个，SN3-5个。
+# 或更改配置：ATT2-3个观测变量，PBC3-4个，SN2个。
 att_combinations <- generate_combinations(att_candidates, min_size = 2)
 att_combinations <- att_combinations[sapply(att_combinations, length) <= 3]
 
 pbc_combinations <- generate_combinations(pbc_candidates, min_size = 3)
 pbc_combinations <- pbc_combinations[sapply(pbc_combinations, length) <= 4]
 
-sn_combinations <- generate_combinations(sn_candidates, min_size = 3)
-sn_combinations <- sn_combinations[sapply(sn_combinations, length) <= 5]
+sn_combinations <- generate_combinations(sn_candidates, min_size = 2)
+sn_combinations <- sn_combinations[sapply(sn_combinations, length) <= 2]
 
 # 生成所有模型组合（三维笛卡尔积）
 all_model_combinations <- expand.grid(
