@@ -630,3 +630,39 @@ view_model_formula <- function(model_id) {
 
 cat("\n使用 view_model_formula(模型编号) 可以查看特定模型的公式\n")
 cat("例如: view_model_formula(1)\n")
+
+# 12. 最终模型筛选 ----
+library(dplyr)
+
+# 1. 先构建基础的变量框架
+base_df <- data.frame(
+  cat = c(rep("ATT", length(att_candidates)),
+          rep("PBC", length(pbc_candidates)),
+          rep("SN", length(sn_candidates))),
+  unified_name_en = c(att_candidates, pbc_candidates, sn_candidates),
+  stringsAsFactors = FALSE
+)
+
+# 2. 定义模型 1954 和 1804 分别包含的变量名单
+vars_1954 <- c("satis_way_of_sh", "ws_attitude", "if_know_method", "if_sign_sort", 
+               "category_trouble", "pr_atten", "regulate_law", "regulate_commu_rule", 
+               "if_neighbor_ws", "if_family_ws")
+
+vars_1804 <- c("satis_way_of_sh", "ws_attitude", "if_know_method", "if_sign_sort", 
+               "category_trouble", "pr_atten", "regulate_law", "regulate_commu_rule", 
+               "if_no_ws_guilty", "if_family_ws")
+
+# 3. 通过基础框架构建最终表格
+final_table <- base_df %>%
+  mutate(
+    m_1954 = ifelse(unified_name_en %in% vars_1954, "Yes", "-"),
+    m_1804 = ifelse(unified_name_en %in% vars_1804, "Yes", "-")
+  ) %>%
+  # 如果你需要保留 col_2023 的原始列名对应关系，可以左连接 colname_mapping
+  left_join(
+    colname_mapping %>% select(col_2023, unified_name_en),
+    by = "unified_name_en"
+  ) %>%
+  select(cat, unified_name_en, col_2023, m_1954, m_1804)
+
+print(final_table)
