@@ -124,6 +124,10 @@ ws_full <- bind_rows(ws_list) %>%
     education_grp = factor(education_grp, levels = c(
       "under_senior", "undergrad", "beyond_master"
     ))
+  ) %>% 
+  # 由于态度最后一个选项是“说不清楚”，因此反转后为“0”的项目要变成NA。
+  mutate(
+    ws_attitude = case_when(ws_attitude == 0 ~ NA, TRUE ~ ws_attitude)
   )
 
 # 用于作图的数据框：加入选项内容。
