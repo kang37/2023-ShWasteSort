@@ -179,35 +179,54 @@ if (lavInspect(fit, "converged")) {
       "Intention -> Behavior"
     )))
 
-  p <- ggplot(plot_data, aes(x = year_num, y = std.all)) +
+  path_colors <- c(
+    "Attitude -> Intention"           = "#4DBB15",
+    "Subjective Norm -> Intention"    = "#4DBBD5",
+    "Perceived Control -> Intention"  = "#00A087",
+    "Intention -> Behavior"           = "#E64B35"
+  )
+
+  plot_data <- plot_data %>%
+    mutate(
+      point_fill = ifelse(
+        pvalue < 0.05,
+        path_colors[as.character(Path_full)],
+        "white"
+      )
+    )
+
+  p <- ggplot(plot_data, aes(x = year_num, y = std.all, color = Path_full)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
-    geom_line(linewidth = 0.9, color = "grey") +
-    geom_point(aes(fill = Significant, shape = Significant), size = 3.5, stroke = 1) +
-    facet_wrap(~ Path_full, nrow = 1) +
+    geom_line(linewidth = 0.9) +
+    geom_point(aes(fill = point_fill, shape = Significant), size = 3.5, stroke = 1) +
+    facet_wrap(~ Path_full, ncol = 1) +
     scale_x_continuous(breaks = 2019:2023) +
+    scale_color_manual(values = path_colors, guide = "none") +
     scale_shape_manual(values = c("Significant (p < 0.05)" = 21, "Not significant" = 21)) +
-    scale_fill_manual(values = c("Significant (p < 0.05)" = "black", "Not significant" = "white")) +
+    scale_fill_identity() +
     labs(
-      title = paste0(
-        "ATT: ", paste(att_vars, collapse = ", "),
-        "\nSN: ", paste(sn_vars, collapse = ", "),
-        "\nPBC: ", paste(pbc_vars, collapse = ", ")
-      ),
+      # title = paste0(
+      #   "ATT: ", paste(att_vars, collapse = ", "),
+      #   "\nSN: ", paste(sn_vars, collapse = ", "),
+      #   "\nPBC: ", paste(pbc_vars, collapse = ", ")
+      # ),
       x = "Year",
       y = "Standardized Coefficient"
     ) +
     theme_classic(base_size = 9) +
     theme(
       plot.title = element_text(hjust = 0.5, face = "bold", size = 9, margin = margin(b = 10)),
+      axis.text.x = element_text(angle = 90), 
       strip.background = element_rect(fill = "gray85", color = "gray50"),
       legend.position = "bottom",
       legend.title = element_blank(),
       panel.border = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
     ) +
     guides(
-      fill = guide_legend(override.aes = list(size = 3.5)),
-      shape = guide_legend(override.aes = list(size = 3.5))
-    )
+      shape = guide_legend(override.aes = list(
+        size = 3.5, fill = c("black", "white"), color = "black"
+      ))
+    ) 
 
   print(p)
 
