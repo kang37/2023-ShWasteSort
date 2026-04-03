@@ -169,10 +169,11 @@ ws_full_text <- ws_full %>%
     )
   )
 
-# ----------------------------------------------------------------------------
 # 3. Basic Description: Respondents' Demographics (Table Output) ----
-#    (from main_2.R)
-# ----------------------------------------------------------------------------
+# 各年份样本数和样本总数。
+table(ws_full$year)
+sum(table(ws_full$year))
+
 # 获取所有变量的原始顺序向量。
 order_levels <- list(
   gender = c("male", "female"),
@@ -232,7 +233,7 @@ cat("Demographics table saved to data_proc/demographics_table.csv
 # Define variables and their labels
 var_info <- tribble(
   ~var,                  ~label,                          ~latent,
-  "satis_way_of_sh",    "Satisfaction with SH sorting",  "ATT",
+  "satis_way_of_sh",    "Satisfaction with sorting",     "ATT",
   "ws_attitude",        "Attitude toward sorting",       "ATT",
   "pr_atten",           "Public publicity effect",       "SN",
   "regulate_law",       "Legal regulation effect",       "SN",
@@ -267,7 +268,7 @@ long_data_sem$label <- factor(long_data_sem$label, levels = var_info$label)
 # Plot stacked bar chart
 png(
   "data_proc/sem_var_distribution_by_year.png", 
-  width = 1000, height = 1000, res = 300
+  width = 1500, height = 1000, res = 300
 )
 ggplot(long_data_sem, aes(x = factor(year), y = prop, fill = score)) +
   geom_col(position = "stack", width = 0.7) +
@@ -275,13 +276,13 @@ ggplot(long_data_sem, aes(x = factor(year), y = prop, fill = score)) +
   scale_y_continuous(labels = scales::percent_format(), expand = c(0, 0)) +
   scale_fill_brewer(palette = "RdYlGn", direction = 1, name = "Score") +
   labs(x = "Year", y = "Proportion") +
-  theme_minimal(base_size = 10) +
+  theme_minimal(base_size = 8) +
   theme(
-    strip.text = element_text(face = "bold", size = 8),
+    strip.text = element_text(face = "bold", size = 6),
     legend.position = "bottom",
     panel.grid.major.x = element_blank(),
     panel.grid.minor = element_blank(),
-    axis.text.x = element_text(angle = 45, hjust = 1)
+    axis.text.x = element_text(angle = 90, hjust = 1)
   )
 dev.off()
 
