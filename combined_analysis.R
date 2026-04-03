@@ -649,7 +649,6 @@ for (gv in grouping_vars) {
         mutate(p_value = NA_real_, p_significance = "", test_type = NA_character_)
     }
 
-
     # Calculate overall mean and median for each group_level (across years)
     overall_stats <- stats_res %>%
       group_by(group_variable, dependent_variable, group_level) %>%
@@ -689,7 +688,7 @@ mean_plot_data <- stats_df %>%
       TRUE ~ group_variable
     ),
     dep_var_label = case_when(
-      dependent_variable == "wil_of_engage" ~ "Intention (Will)",
+      dependent_variable == "wil_of_engage" ~ "Intention",
       dependent_variable == "seper_recyc" ~ "Behavior",
       TRUE ~ dependent_variable
     ),
@@ -707,6 +706,7 @@ mean_plot_data <- stats_df %>%
       TRUE ~ as.character(group_level)
     )
   )
+write.csv(mean_plot_data, "data_proc/mean_intension_behavior_of_group.csv")
 
 # Prepare significance data for annotation
 sig_data <- comparison_df %>%
@@ -718,12 +718,13 @@ sig_data <- comparison_df %>%
       TRUE ~ group_variable
     ),
     dep_var_label = case_when(
-      dependent_variable == "wil_of_engage" ~ "Intention (Will)",
+      dependent_variable == "wil_of_engage" ~ "Intention",
       dependent_variable == "seper_recyc" ~ "Behavior",
       TRUE ~ dependent_variable
     ),
     significant = p_value < 0.05
   )
+write.csv(sig_data, "data_proc/mean_intension_behavior_of_group_statistic.csv")
 
 # 各变量下意图和行为的差异，及其统计结果。
 p_mean_scores <- ggplot(mean_plot_data) +
@@ -733,8 +734,7 @@ p_mean_scores <- ggplot(mean_plot_data) +
     linewidth = 0.8
   ) +
   geom_point(
-    aes(x = factor(year), y = mean_val, color = group_level_label),
-    size = 2.5
+    aes(x = factor(year), y = mean_val, color = group_level_label)
   ) +
   # Add significance stars at the top
   geom_text(
@@ -742,26 +742,21 @@ p_mean_scores <- ggplot(mean_plot_data) +
     aes(x = factor(year), y = 4.8, label = p_significance),
     size = 4, color = "#E64B35", fontface = "bold", inherit.aes = FALSE
   ) +
-  facet_grid(dep_var_label ~ group_var_label) +
-  scale_color_brewer(palette = "Set2", name = "Group Level") +
+  facet_grid(group_var_label ~ dep_var_label) +
+  # scale_color_brewer(palette = "Set2", name = "Group Level") +
   scale_y_continuous(limits = c(1, 5), breaks = 1:5) +
   labs(
-    x = "Year",
-    y = "Mean Score",
-    title = "Mean Scores of Intention and Behavior by Group Levels Across Years",
-    caption = "*, **, *** indicate p < 0.05, 0.01, 0.001"
+    x = "Year", y = "Mean Score",
+    title = "Mean Scores of Intention and Behavior by Group Levels"
   ) +
   theme_minimal(base_size = 10) +
   theme(
     plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
     plot.caption = element_text(hjust = 0, size = 8, color = "gray40"),
-    strip.text = element_text(face = "bold", size = 10),
     strip.background = element_rect(fill = "gray90", color = "gray70"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom",
+    axis.text.x = element_text(angle = 90, hjust = 1),
     panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5)
-  ) +
-  guides(color = guide_legend(nrow = 2))
+  )
 p_mean_scores
 
 # ----------------------------------------------------------------------------
