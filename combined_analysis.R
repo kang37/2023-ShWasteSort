@@ -9,12 +9,9 @@
 # 1. Load Required Packages ----
 # ----------------------------------------------------------------------------
 # Ensure pacman is installed to manage other packages
-if (!requireNamespace("pacman", quietly = TRUE)) {
-  install.packages("pacman")
-}
 pacman::p_load(
   dplyr, stringr, tidyr, patchwork, ggplot2, corrplot, readxl, purrr, showtext,
-  lavaan, tribble # tribble is used in plot_var_distribution.R
+  lavaan
 )
 showtext::showtext_auto()
 
@@ -265,7 +262,7 @@ long_data_sem <- ws_full %>%
 # Set facet order by latent variable group
 long_data_sem$label <- factor(long_data_sem$label, levels = var_info$label)
 
-# Plot stacked bar chart
+# SEM相关变量各年份各分数选择比例条形图。
 png(
   "data_proc/sem_var_distribution_by_year.png", 
   width = 1500, height = 1000, res = 300
@@ -285,6 +282,22 @@ ggplot(long_data_sem, aes(x = factor(year), y = prop, fill = score)) +
     axis.text.x = element_text(angle = 90, hjust = 1)
   )
 dev.off()
+# 折线图。
+plotly::ggplotly(
+  ggplot(long_data_sem) + 
+    geom_line(aes(year, prop, col = score, group = score)) + 
+    facet_wrap(.~ variable) + 
+    scale_color_brewer(palette = "RdYlGn", direction = 1, name = "Score")
+)
+# 对应数据。
+long_data_sem %>% 
+  filter(score == 4 | score == 5) %>% 
+  group_by(variable, year) %>% 
+  summarise(prop = sum(prop), .groups = "drop") %>% 
+  mutate(prop = round(prop, digits = 2)) %>% 
+  pivot_wider(
+    id_cols = variable, names_from = year, values_from = prop
+  ) 
 
 # ----------------------------------------------------------------------------
 # 5. Structural Equation Model (SEM) Analysis and Coefficient Plot ----
@@ -530,9 +543,7 @@ SEM model did not converge.
 ")
 }
 
-# ----------------------------------------------------------------------------
 # 6. Group Differences in Intention and Behavior ----
-# ----------------------------------------------------------------------------
 
 # Dependent variables for difference analysis
 target_vars_diff <- c("wil_of_engage", "seper_recyc")
