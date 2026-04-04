@@ -222,10 +222,7 @@ write.csv(demographics_table, "data_proc/demographics_table.csv", row.names = FA
 cat("Demographics table saved to data_proc/demographics_table.csv
 ")
 
-# ----------------------------------------------------------------------------
 # 4. SEM Variables Distribution Plot ----
-#    (from plot_var_distribution.R)
-# ----------------------------------------------------------------------------
 
 # Define variables and their labels
 var_info <- tribble(
@@ -299,11 +296,223 @@ long_data_sem %>%
     id_cols = variable, names_from = year, values_from = prop
   ) 
 
-# ----------------------------------------------------------------------------
-# 5. Structural Equation Model (SEM) Analysis and Coefficient Plot ----
-#    (from sem_single.R)
-# ----------------------------------------------------------------------------
+# Group Differences in Intention and Behavior ----
+# Dependent variables for difference analysis
+target_vars_diff <- c("wil_of_engage", "seper_recyc")
+# Grouping variables
+grouping_vars <- c("gender", "age_grp", "education_grp")
 
+# Function to perform statistical comparison (Wilcoxon or Kruskal-Wallis)
+perform_group_comparison <- function(data, group_var, dep_var) {
+  result_list <- lapply(unique(data$year), function(y) {
+    df_year <- data %>%
+      filter(year == y, !is.na(.data[[group_var]]), !is.na(.data[[dep_var]]))
+    
+    if (nrow(df_year) == 0) {
+      return(NULL)
+    }
+    
+    # Ensure the grouping variable is a factor for test
+    df_year[[group_var]] <- factor(df_year[[group_var]])
+    
+    n_levels <- length(levels(df_year[[group_var]]))
+    
+    if (n_levels < 2) { # Not enough levels to compare
+      return(NULL)
+    }
+    
+    test_res <- if (n_levels == 2) {
+      # Use formula interface for wilcox.test
+      wilcox.test(formula(paste(dep_var, "~", group_var)), data = df_year)
+    } else {
+      # Use formula interface for kruskal.test
+      kruskal.test(formula(paste(dep_var, "~", group_var)), data = df_year)
+    }
+    
+    p_val <- test_res$p.value
+    p_sig <- case_when(
+      p_val < 0.001 ~ "***",
+      p_val < 0.01 ~ "**",
+      p_val < 0.05 ~ "*",
+      TRUE ~ ""
+    )
+    
+    tibble(
+      year = y,
+      group_variable = group_var,
+      dependent_variable = dep_var,
+      p_value = p_val,
+      p_significance = p_sig,
+      test_type = ifelse(n_levels == 2, "Wilcoxon Rank Sum Test", "Kruskal-Wallis Test")
+    )
+  })
+  bind_rows(result_list)
+}
+
+# Function to calculate mean and median for each group level
+calculate_group_stats <- function(data, group_var, dep_var) {
+  data %>%
+    filter(!is.na(.data[[group_var]]), !is.na(.data[[dep_var]])) %>%
+    group_by(year, .data[[group_var]]) %>%
+    summarise(
+      mean_val = mean(.data[[dep_var]], na.rm = TRUE),
+      median_val = median(.data[[dep_var]], na.rm = TRUE),
+      .groups = "drop_last" # Keep year grouping for now
+    ) %>%
+    ungroup() %>% # Remove all grouping
+    rename(group_level = as.name(group_var)) %>%
+    mutate(
+      group_variable = group_var,
+      dependent_variable = dep_var
+    ) %>%
+    select(year, group_variable, dependent_variable, group_level, mean_val, median_val)
+}
+
+# Initialize lists to store results
+all_group_diff_results <- list()
+all_comparison_results <- list()
+all_stats_results <- list()
+counter <- 1
+
+for (gv in grouping_vars) {
+  for (dv in target_vars_diff) {
+    cat(paste0("Analyzing group differences for ", dv, " by ", gv, "...\n"))
+    
+    # Perform statistical comparison
+    comp_res <- perform_group_comparison(ws_full, gv, dv)
+    
+    # Calculate group-level statistics
+    stats_res <- calculate_group_stats(ws_full, gv, dv)
+    
+    # Store comparison and stats results separately for plotting
+    if (!is.null(comp_res) && nrow(comp_res) > 0) {
+      all_comparison_results[[counter]] <- comp_res
+    }
+    all_stats_results[[counter]] <- stats_res
+    
+    # Combine comparison results with statistics
+    if (!is.null(comp_res) && nrow(comp_res) > 0) {
+      combined_yearly_results <- left_join(
+        stats_res,
+        comp_res %>% select(year, dependent_variable, p_value, p_significance, test_type),
+        by = c("year", "dependent_variable")
+      )
+    } else {
+      combined_yearly_results <- stats_res %>%
+        mutate(p_value = NA_real_, p_significance = "", test_type = NA_character_)
+    }
+    
+    # Calculate overall mean and median for each group_level (across years)
+    overall_stats <- stats_res %>%
+      group_by(group_variable, dependent_variable, group_level) %>%
+      summarise(
+        overall_mean = mean(mean_val, na.rm = TRUE),
+        overall_median = median(median_val, na.rm = TRUE),
+        .groups = "drop"
+      )
+    
+    # Combine yearly results with overall stats
+    final_combined_res <- combined_yearly_results %>%
+      left_join(overall_stats, by = c("group_variable", "dependent_variable", "group_level"))
+    
+    all_group_diff_results[[counter]] <- final_combined_res
+    counter <- counter + 1
+  }
+}
+
+# Bind all results into single data frames
+final_group_diff_table <- bind_rows(all_group_diff_results) %>%
+  arrange(group_variable, dependent_variable, year, group_level)
+comparison_df <- bind_rows(all_comparison_results)
+stats_df <- bind_rows(all_stats_results)
+
+# Save the final table to CSV
+write.csv(final_group_diff_table, "data_proc/group_differences_table.csv", row.names = FALSE)
+cat("Group differences table saved to data_proc/group_differences_table.csv\n")
+
+# --- Plot: Mean scores by group levels across years with significance markers ---
+# Prepare data for mean score plot
+mean_plot_data <- stats_df %>%
+  mutate(
+    group_var_label = case_when(
+      group_variable == "gender" ~ "Gender",
+      group_variable == "age_grp" ~ "Age Group",
+      group_variable == "education_grp" ~ "Education Level",
+      TRUE ~ group_variable
+    ),
+    dep_var_label = case_when(
+      dependent_variable == "wil_of_engage" ~ "Intention",
+      dependent_variable == "seper_recyc" ~ "Behavior",
+      TRUE ~ dependent_variable
+    ),
+    # Clean up group level labels
+    group_level_label = case_when(
+      group_level == "1" ~ "Male",
+      group_level == "2" ~ "Female",
+      group_level == "<=25" ~ "<=25",
+      group_level == "25~40" ~ "25~40",
+      group_level == "40_60" ~ "40~60",
+      group_level == ">60" ~ ">60",
+      group_level == "under_senior" ~ "High School or Below",
+      group_level == "undergrad" ~ "Undergraduate",
+      group_level == "beyond_master" ~ "Graduate or Above",
+      TRUE ~ as.character(group_level)
+    )
+  )
+write.csv(mean_plot_data, "data_proc/mean_intension_behavior_of_group.csv")
+
+# Prepare significance data for annotation
+sig_data <- comparison_df %>%
+  mutate(
+    group_var_label = case_when(
+      group_variable == "gender" ~ "Gender",
+      group_variable == "age_grp" ~ "Age Group",
+      group_variable == "education_grp" ~ "Education Level",
+      TRUE ~ group_variable
+    ),
+    dep_var_label = case_when(
+      dependent_variable == "wil_of_engage" ~ "Intention",
+      dependent_variable == "seper_recyc" ~ "Behavior",
+      TRUE ~ dependent_variable
+    ),
+    significant = p_value < 0.05
+  )
+write.csv(sig_data, "data_proc/mean_intension_behavior_of_group_statistic.csv")
+
+# 各变量下意图和行为的差异，及其统计结果。
+p_mean_scores <- ggplot(mean_plot_data) +
+  # Add lines and points for mean scores
+  geom_line(
+    aes(x = factor(year), y = mean_val, color = group_level_label, group = group_level_label),
+    linewidth = 0.8
+  ) +
+  geom_point(
+    aes(x = factor(year), y = mean_val, color = group_level_label)
+  ) +
+  # Add significance stars at the top
+  geom_text(
+    data = sig_data,
+    aes(x = factor(year), y = 4.8, label = p_significance),
+    size = 4, color = "#E64B35", fontface = "bold", inherit.aes = FALSE
+  ) +
+  facet_grid(group_var_label ~ dep_var_label) +
+  # scale_color_brewer(palette = "Set2", name = "Group Level") +
+  scale_y_continuous(limits = c(1, 5), breaks = 1:5) +
+  labs(
+    x = "Year", y = "Mean Score",
+    title = "Mean Scores of Intention and Behavior by Group Levels"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
+    plot.caption = element_text(hjust = 0, size = 8, color = "gray40"),
+    strip.background = element_rect(fill = "gray90", color = "gray70"),
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5)
+  )
+p_mean_scores
+
+# SEM Analysis and Coefficient Plot ----
 # Define observed variables for latent constructs
 att_vars <- c("satis_way_of_sh", "ws_attitude")
 sn_vars  <- c("pr_atten", "regulate_law", "regulate_commu_rule",
@@ -364,11 +573,8 @@ build_sem_model <- function(att_vars, pbc_vars, sn_vars) {
 
 model_string <- build_sem_model(att_vars, pbc_vars, sn_vars)
 
-cat("SEM Model Formula:
-")
-cat(model_string, "
-
-")
+cat("SEM Model Formula:")
+cat(model_string)
 
 # Define ordered variables and check
 ordered_vars_all <- c(
@@ -542,222 +748,6 @@ Standardized Path Coefficients:
 SEM model did not converge.
 ")
 }
-
-# Group Differences in Intention and Behavior ----
-# Dependent variables for difference analysis
-target_vars_diff <- c("wil_of_engage", "seper_recyc")
-# Grouping variables
-grouping_vars <- c("gender", "age_grp", "education_grp")
-
-# Function to perform statistical comparison (Wilcoxon or Kruskal-Wallis)
-perform_group_comparison <- function(data, group_var, dep_var) {
-  result_list <- lapply(unique(data$year), function(y) {
-    df_year <- data %>%
-      filter(year == y, !is.na(.data[[group_var]]), !is.na(.data[[dep_var]]))
-
-    if (nrow(df_year) == 0) {
-      return(NULL)
-    }
-
-    # Ensure the grouping variable is a factor for test
-    df_year[[group_var]] <- factor(df_year[[group_var]])
-
-    n_levels <- length(levels(df_year[[group_var]]))
-
-    if (n_levels < 2) { # Not enough levels to compare
-      return(NULL)
-    }
-
-    test_res <- if (n_levels == 2) {
-      # Use formula interface for wilcox.test
-      wilcox.test(formula(paste(dep_var, "~", group_var)), data = df_year)
-    } else {
-      # Use formula interface for kruskal.test
-      kruskal.test(formula(paste(dep_var, "~", group_var)), data = df_year)
-    }
-
-    p_val <- test_res$p.value
-    p_sig <- case_when(
-      p_val < 0.001 ~ "***",
-      p_val < 0.01 ~ "**",
-      p_val < 0.05 ~ "*",
-      TRUE ~ ""
-    )
-
-    tibble(
-      year = y,
-      group_variable = group_var,
-      dependent_variable = dep_var,
-      p_value = p_val,
-      p_significance = p_sig,
-      test_type = ifelse(n_levels == 2, "Wilcoxon Rank Sum Test", "Kruskal-Wallis Test")
-    )
-  })
-  bind_rows(result_list)
-}
-
-# Function to calculate mean and median for each group level
-calculate_group_stats <- function(data, group_var, dep_var) {
-  data %>%
-    filter(!is.na(.data[[group_var]]), !is.na(.data[[dep_var]])) %>%
-    group_by(year, .data[[group_var]]) %>%
-    summarise(
-      mean_val = mean(.data[[dep_var]], na.rm = TRUE),
-      median_val = median(.data[[dep_var]], na.rm = TRUE),
-      .groups = "drop_last" # Keep year grouping for now
-    ) %>%
-    ungroup() %>% # Remove all grouping
-    rename(group_level = as.name(group_var)) %>%
-    mutate(
-      group_variable = group_var,
-      dependent_variable = dep_var
-    ) %>%
-    select(year, group_variable, dependent_variable, group_level, mean_val, median_val)
-}
-
-# Initialize lists to store results
-all_group_diff_results <- list()
-all_comparison_results <- list()
-all_stats_results <- list()
-counter <- 1
-
-for (gv in grouping_vars) {
-  for (dv in target_vars_diff) {
-    cat(paste0("Analyzing group differences for ", dv, " by ", gv, "...\n"))
-
-    # Perform statistical comparison
-    comp_res <- perform_group_comparison(ws_full, gv, dv)
-
-    # Calculate group-level statistics
-    stats_res <- calculate_group_stats(ws_full, gv, dv)
-
-    # Store comparison and stats results separately for plotting
-    if (!is.null(comp_res) && nrow(comp_res) > 0) {
-      all_comparison_results[[counter]] <- comp_res
-    }
-    all_stats_results[[counter]] <- stats_res
-
-    # Combine comparison results with statistics
-    if (!is.null(comp_res) && nrow(comp_res) > 0) {
-      combined_yearly_results <- left_join(
-        stats_res,
-        comp_res %>% select(year, dependent_variable, p_value, p_significance, test_type),
-        by = c("year", "dependent_variable")
-      )
-    } else {
-      combined_yearly_results <- stats_res %>%
-        mutate(p_value = NA_real_, p_significance = "", test_type = NA_character_)
-    }
-
-    # Calculate overall mean and median for each group_level (across years)
-    overall_stats <- stats_res %>%
-      group_by(group_variable, dependent_variable, group_level) %>%
-      summarise(
-        overall_mean = mean(mean_val, na.rm = TRUE),
-        overall_median = median(median_val, na.rm = TRUE),
-        .groups = "drop"
-      )
-
-    # Combine yearly results with overall stats
-    final_combined_res <- combined_yearly_results %>%
-      left_join(overall_stats, by = c("group_variable", "dependent_variable", "group_level"))
-
-    all_group_diff_results[[counter]] <- final_combined_res
-    counter <- counter + 1
-  }
-}
-
-# Bind all results into single data frames
-final_group_diff_table <- bind_rows(all_group_diff_results) %>%
-  arrange(group_variable, dependent_variable, year, group_level)
-comparison_df <- bind_rows(all_comparison_results)
-stats_df <- bind_rows(all_stats_results)
-
-# Save the final table to CSV
-write.csv(final_group_diff_table, "data_proc/group_differences_table.csv", row.names = FALSE)
-cat("Group differences table saved to data_proc/group_differences_table.csv\n")
-
-# --- Plot: Mean scores by group levels across years with significance markers ---
-# Prepare data for mean score plot
-mean_plot_data <- stats_df %>%
-  mutate(
-    group_var_label = case_when(
-      group_variable == "gender" ~ "Gender",
-      group_variable == "age_grp" ~ "Age Group",
-      group_variable == "education_grp" ~ "Education Level",
-      TRUE ~ group_variable
-    ),
-    dep_var_label = case_when(
-      dependent_variable == "wil_of_engage" ~ "Intention",
-      dependent_variable == "seper_recyc" ~ "Behavior",
-      TRUE ~ dependent_variable
-    ),
-    # Clean up group level labels
-    group_level_label = case_when(
-      group_level == "1" ~ "Male",
-      group_level == "2" ~ "Female",
-      group_level == "<=25" ~ "<=25",
-      group_level == "25~40" ~ "25~40",
-      group_level == "40_60" ~ "40~60",
-      group_level == ">60" ~ ">60",
-      group_level == "under_senior" ~ "High School or Below",
-      group_level == "undergrad" ~ "Undergraduate",
-      group_level == "beyond_master" ~ "Graduate or Above",
-      TRUE ~ as.character(group_level)
-    )
-  )
-write.csv(mean_plot_data, "data_proc/mean_intension_behavior_of_group.csv")
-
-# Prepare significance data for annotation
-sig_data <- comparison_df %>%
-  mutate(
-    group_var_label = case_when(
-      group_variable == "gender" ~ "Gender",
-      group_variable == "age_grp" ~ "Age Group",
-      group_variable == "education_grp" ~ "Education Level",
-      TRUE ~ group_variable
-    ),
-    dep_var_label = case_when(
-      dependent_variable == "wil_of_engage" ~ "Intention",
-      dependent_variable == "seper_recyc" ~ "Behavior",
-      TRUE ~ dependent_variable
-    ),
-    significant = p_value < 0.05
-  )
-write.csv(sig_data, "data_proc/mean_intension_behavior_of_group_statistic.csv")
-
-# 各变量下意图和行为的差异，及其统计结果。
-p_mean_scores <- ggplot(mean_plot_data) +
-  # Add lines and points for mean scores
-  geom_line(
-    aes(x = factor(year), y = mean_val, color = group_level_label, group = group_level_label),
-    linewidth = 0.8
-  ) +
-  geom_point(
-    aes(x = factor(year), y = mean_val, color = group_level_label)
-  ) +
-  # Add significance stars at the top
-  geom_text(
-    data = sig_data,
-    aes(x = factor(year), y = 4.8, label = p_significance),
-    size = 4, color = "#E64B35", fontface = "bold", inherit.aes = FALSE
-  ) +
-  facet_grid(group_var_label ~ dep_var_label) +
-  # scale_color_brewer(palette = "Set2", name = "Group Level") +
-  scale_y_continuous(limits = c(1, 5), breaks = 1:5) +
-  labs(
-    x = "Year", y = "Mean Score",
-    title = "Mean Scores of Intention and Behavior by Group Levels"
-  ) +
-  theme_minimal(base_size = 10) +
-  theme(
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 12),
-    plot.caption = element_text(hjust = 0, size = 8, color = "gray40"),
-    strip.background = element_rect(fill = "gray90", color = "gray70"),
-    axis.text.x = element_text(angle = 90, hjust = 1),
-    panel.border = element_rect(color = "gray70", fill = NA, linewidth = 0.5)
-  )
-p_mean_scores
 
 # ----------------------------------------------------------------------------
 # 7. Spillover Effect Analysis: Correlation between Waste Sorting and Other Environmental Behaviors ----
