@@ -115,32 +115,30 @@ ws_full <- bind_rows(ws_list) %>%
   ) %>%
   mutate(
     # 转化性别数据类型。
-    gender = case_when(gender == "-2" ~ NA, TRUE ~ gender),
+    gender = na_if(gender, -2),
     gender = as.factor(gender),
     # 新增分组形式年龄变量。
     age_grp = case_when(
       age <= 25 ~ "<=25", age <= 40 ~ "25~40", age <= 60 ~ "40_60",
-      age <= 100 ~ ">60", age >= 100 ~ NA
+      age <= 100 ~ ">60", age >= 100 ~ NA_character_
     ),
     age_grp = factor(age_grp, levels = c("<=25", "25~40", "40_60", ">60")),
     # 新增教育水平分组。
     education_grp = case_when(
       education <= 3 ~ "under_senior", education == 4 ~ "undergrad",
-      education == 5 ~ "beyond_master", education == 6 ~ NA
+      education == 5 ~ "beyond_master", education == 6 ~ NA_character_
     ),
     education_grp = factor(education_grp, levels = c(
       "under_senior", "undergrad", "beyond_master"
     ))
   ) %>%
   # 由于态度最后一个选项是“说不清楚”，因此反转后为“0”的项目要变成NA。
-  mutate(
-    ws_attitude = case_when(ws_attitude == 0 ~ NA, TRUE ~ ws_attitude)
-  )
+  mutate(ws_attitude = na_if(ws_attitude, 0))
 
 # 用于作图的数据框：加入选项内容。
 ws_full_text <- ws_full %>%
   mutate(
-    gender = case_match(as.character(gender), "1" ~ "male", "2" ~ "female"),
+    gender = case_match(as.character(gender), "1" ~ "male", "2" ~ "female"), 
     education = case_match(
       as.character(education),
       "1" ~ "primary", "2" ~ "junior_high", "3" ~ "senior_high",
@@ -219,8 +217,6 @@ demographics_table <- bind_rows(gene_des_proc, gene_des_avg %>% mutate(year = "A
   arrange(variable, category)
 
 write.csv(demographics_table, "data_proc/demographics_table.csv", row.names = FALSE)
-cat("Demographics table saved to data_proc/demographics_table.csv
-")
 
 # 4. SEM Variables Distribution Plot ----
 
