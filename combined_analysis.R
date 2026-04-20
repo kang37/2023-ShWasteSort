@@ -598,6 +598,15 @@ validity_results <- get_reliability_stats(fit_cfa)
 print("Construct Reliability (CR) and AVE (Average Variance Extracted):")
 print(validity_results)
 
+# Save Reliability and Validity results to CSV
+write.csv(reliability_results, "data_proc/reliability_results.csv", row.names = FALSE)
+write.csv(validity_results, "data_proc/validity_results.csv", row.names = FALSE)
+cat("Reliability and Validity results saved to data_proc/.\n")
+
+# ----------------------------------------------------------------------------
+# 6. Build SEM Model and Fit ----
+# ----------------------------------------------------------------------------
+
 # Build model string
 build_sem_model <- function(att_vars, pbc_vars, sn_vars) {
   att_formula <- paste("ATT =~", paste(att_vars, collapse = " + "))
@@ -827,23 +836,66 @@ get_cor <- function(data, var_x, var_y) {
       tar_df <- data %>%
         filter(year == y, !is.na(.data[[var_x]]), !is.na(.data[[var_y]]))
 
-      if (nrow(tar_df) > 1) { # Need at least 2 non-NA observations to calculate correlation
-        res_stat <-
-          cor.test(tar_df[[var_x]], tar_df[[var_y]], method = "kendall")
+      if (nrow(tar_df) > 10) { # Sufficient observations
+        val_x <- tar_df[[var_x]]
+        val_y <- tar_df[[var_y]]
+        
+        # Check if one of them is binary
+        unique_x <- unique(val_x[!is.na(val_x)])
+        unique_y <- unique(val_y[!is.na(val_y)])
+        is_binary_x <- length(unique_x) == 2
+        is_binary_y <- length(unique_y) == 2
+        
+        if (is_binary_x || is_binary_y) {
+          # --- Case: Binary vs Ordinal/Continuous ---
+          # We use Wilcoxon Rank-Sum Test and calculate Rank-Biserial Correlation
+          # Identify which is the binary grouping variable
+          if (is_binary_x) {
+            group_var <- val_x
+            test_var <- val_y
+          } else {
+            group_var <- val_y
+            test_var <- val_x
+          }
+          
+          # Wilcoxon Test
+          res_wilcox <- wilcox.test(test_var ~ group_var)
+          p_val <- res_wilcox$p.value
+          
+          # Calculate Rank-Biserial Correlation as the estimate
+          # Formula: r = 1 - (2 * W / (n1 * n2))
+          n1 <- sum(group_var == unique(group_var)[1])
+          n2 <- sum(group_var == unique(group_var)[2])
+          w_stat <- res_wilcox$statistic
+          # Note: wilcox.test statistic W = U1. 
+          # r_rb = (2 * W / (n1 * n2)) - 1  (adjusted for direction)
+          est <- (2 * w_stat / (n1 * n2)) - 1
+          
+          method_tag <- "Wilcoxon (Rank-Biserial r)"
+        } else {
+          # --- Case: Both Ordinal/Continuous ---
+          res_stat <- cor.test(val_x, val_y, method = "kendall")
+          est <- res_stat$estimate
+          p_val <- res_stat$p.value
+          method_tag <- "Kendall's Tau"
+        }
+        
         res <- tibble(
           year = y,
           var_1 = var_x,
           var_2 = var_y,
-          correlation_tau = res_stat$estimate,
-          p_value = res_stat$p.value
+          correlation_estimate = est,
+          p_value = p_val,
+          method = method_tag
         )
       } else {
         res <- tibble(
           year = y,
           var_1 = var_x,
           var_2 = var_y,
-          correlation_tau = NA_real_,
-          p_value = NA_real_
+          correlation_estimate = NA_real_,
+          p_value = NA_real_,
+          method = "Insufficient data"
         )
       }
       return(res)
