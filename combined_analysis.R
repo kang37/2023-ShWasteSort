@@ -11,7 +11,7 @@
 # Ensure pacman is installed to manage other packages
 pacman::p_load(
   dplyr, stringr, tidyr, patchwork, ggplot2, corrplot, readxl, purrr, showtext,
-  lavaan
+  lavaan, psych, semTools
 )
 showtext::showtext_auto()
 
@@ -515,6 +515,89 @@ sn_vars  <- c("pr_atten", "regulate_law", "regulate_commu_rule",
                "if_neighbor_ws", "if_family_ws")
 pbc_vars <- c("if_know_method", "if_sign_sort", "category_trouble")
 
+# Define ordered variables and check
+ordered_vars_all <- c(
+  "satis_way_of_commu", "satis_way_of_sh", # satis_way_of_commu not in var_info
+  "ws_attitude", "threat", # threat not in var_info
+  "pr_atten", "if_no_ws_guilty", # if_no_ws_guilty not in var_info
+  "regulate_law", "regulate_commu_rule",
+  "if_neighbor_ws", "if_family_ws",
+  "if_know_method", "if_sign_sort",
+  "category_trouble", "time_cost_troub", # time_cost_troub not in var_info
+  "wil_of_engage"
+)
+
+model_vars <- c(att_vars, pbc_vars, sn_vars)
+ordered_vars_used <- intersect(ordered_vars_all, model_vars) # Only include variables actually in the model and data
+
+# ----------------------------------------------------------------------------
+# 5. Reliability and Validity Analysis (CFA) ----
+# ----------------------------------------------------------------------------
+cat("Performing Reliability and Validity Analysis...\n")
+
+# Function to calculate Cronbach's Alpha for each construct
+get_alpha <- function(df, vars, label) {
+  res <- psych::alpha(df[, vars], check.keys = TRUE)
+  return(data.frame(Construct = label, Alpha = res$total$raw_alpha))
+}
+
+# Function to calculate CR and AVE from lavaan fit (Handles Multi-group)
+get_reliability_stats <- function(fit) {
+  # compRelSEM returns CR (Composite Reliability)
+  # AVE returns Average Variance Extracted
+  # For multi-group, they typically return a MATRIX where columns are groups and rows are constructs
+  cr_mat <- semTools::compRelSEM(fit)
+  ave_mat <- semTools::AVE(fit)
+  
+  # Convert matrix to long-format data frame
+  # Get group names (years)
+  years <- colnames(cr_mat)
+  constructs <- rownames(cr_mat)
+  
+  res_list <- list()
+  for (y in years) {
+    res_list[[y]] <- data.frame(
+      year = y,
+      Construct = constructs,
+      CR = as.numeric(cr_mat[, y]),
+      AVE = as.numeric(ave_mat[, y])
+    )
+  }
+  
+  res_all <- bind_rows(res_list)
+  return(res_all)
+}
+
+# Calculate Reliability (Cronbach's Alpha) per year
+reliability_results <- lapply(unique(ws_full$year), function(y) {
+  df_year <- ws_full %>% filter(year == y)
+  
+  alpha_att <- get_alpha(df_year, att_vars, "ATT")
+  alpha_sn  <- get_alpha(df_year, sn_vars, "SN")
+  alpha_pbc <- get_alpha(df_year, pbc_vars, "PBC")
+  
+  bind_rows(alpha_att, alpha_sn, alpha_pbc) %>% mutate(year = y)
+}) %>% bind_rows()
+
+# Print Reliability Results
+print(reliability_results)
+
+# Perform CFA for Validity Analysis
+cfa_model <- paste(
+  paste("ATT =~", paste(att_vars, collapse = " + ")),
+  paste("SN  =~", paste(sn_vars, collapse = " + ")),
+  paste("PBC =~", paste(pbc_vars, collapse = " + ")),
+  sep = "\n"
+)
+
+cat("Fitting CFA model...\n")
+fit_cfa <- cfa(model = cfa_model, data = ws_full, group = "year", estimator = "WLSMV", ordered = ordered_vars_used)
+
+# Extract CR and AVE
+validity_results <- get_reliability_stats(fit_cfa)
+print("Construct Reliability (CR) and AVE (Average Variance Extracted):")
+print(validity_results)
+
 # Build model string
 build_sem_model <- function(att_vars, pbc_vars, sn_vars) {
   att_formula <- paste("ATT =~", paste(att_vars, collapse = " + "))
@@ -571,21 +654,6 @@ model_string <- build_sem_model(att_vars, pbc_vars, sn_vars)
 
 cat("SEM Model Formula:")
 cat(model_string)
-
-# Define ordered variables and check
-ordered_vars_all <- c(
-  "satis_way_of_commu", "satis_way_of_sh", # satis_way_of_commu not in var_info
-  "ws_attitude", "threat", # threat not in var_info
-  "pr_atten", "if_no_ws_guilty", # if_no_ws_guilty not in var_info
-  "regulate_law", "regulate_commu_rule",
-  "if_neighbor_ws", "if_family_ws",
-  "if_know_method", "if_sign_sort",
-  "category_trouble", "time_cost_troub", # time_cost_troub not in var_info
-  "wil_of_engage"
-)
-
-model_vars <- c(att_vars, pbc_vars, sn_vars)
-ordered_vars_used <- intersect(ordered_vars_all, model_vars) # Only include variables actually in the model and data
 
 check_vars <- c(model_vars, "wil_of_engage", "seper_recyc")
 missing_vars <- setdiff(check_vars, names(ws_full))
@@ -794,7 +862,7 @@ get_cor <- function(data, var_x, var_y) {
 waste_sorting_vars <- c("seper_recyc") # wil_of_engage: Willingness to engage, seper_recyc: Separation behavior
 
 # Define other environmental behaviors
-other_env_behaviors <- c("reuse_bag", "energy_concern", "save_energy", "share_often")
+other_env_behaviors <- c("reuse_bag", "energy_concern", "save_energy", "share_often", "freq_online_secondhand", "volun_expr")
 
 # Initialize an empty list to store all spillover correlation results
 all_spillover_results <- list()
