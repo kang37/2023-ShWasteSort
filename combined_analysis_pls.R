@@ -425,37 +425,27 @@ p_mean_scores <- ggplot(mean_plot_data) +
   )
 p_mean_scores
 
-# SEM variable definitions ----
+# SEM ----
+## Variables ----
 # ATT: 方案1 - 情感-认知态度
 att_vars <- c("ws_attitude", "ws_interest", "threat")
 # SN 拆分方案：
-#   INJ_NORM（指令性规范）= 制度/社会压力类
-#   DESC_NORM（描述性规范）= 参照他人行为类
+# INJ_NORM（指令性规范）= 制度/社会压力类
+# DESC_NORM（描述性规范）= 参照他人行为类
 inj_norm_vars  <- c("pr_atten", "regulate_law", "regulate_commu_rule")
 desc_norm_vars <- c("if_neighbor_ws", "if_family_ws")
+# 知觉行为控制PBC。
 pbc_vars <- c("category_trouble", "time_cost_troub")
+# 所有变量。
 model_vars <- c(att_vars, inj_norm_vars, desc_norm_vars, pbc_vars)
 
-check_vars <- c(model_vars, "wil_of_engage", "seper_recyc")
-missing_vars <- setdiff(check_vars, names(ws_full))
-if (length(missing_vars) > 0) {
-  print(missing_vars)
-  stop("Missing required variables, cannot proceed with PLS-SEM.")
-} else {
-  cat("All PLS-SEM variables check passed!\n\n")
-}
-
-# ----------------------------------------------------------------------------
-# 5. Reliability and Validity Analysis (PLS-SEM) ----
-# ----------------------------------------------------------------------------
+## Reliability and Validity Analysis ----
 # PLS-SEM uses reflective measurement models (Mode A), equivalent to CFA.
 # Reliability: Cronbach's alpha + rho_c (composite reliability, CR).
 # Convergent validity: AVE >= 0.5.
 # Discriminant validity: HTMT < 0.85 (Henseler et al., 2015).
-cat("Performing Reliability and Validity Analysis (PLS-SEM)...\n")
 
 # Define the PLS measurement model (reflective constructs = Mode A).
-# SN is split into INJ_NORM (injunctive) and DESC_NORM (descriptive).
 # Single-item endogenous variables must also be declared here.
 pls_mm <- constructs(
   reflective("ATT",       att_vars),
@@ -466,7 +456,7 @@ pls_mm <- constructs(
   reflective("seper_recyc",   single_item("seper_recyc"))
 )
 
-# Define the PLS structural model (简洁版)
+# Define the PLS structural model
 # INJ_NORM、DESC_NORM、PBC → ATT → 意图 → 行为
 # 移除所有不稳定的直接路径
 pls_sm <- relationships(
@@ -512,7 +502,8 @@ reliability_results <- lapply(unique(ws_full$year), function(y) {
     get_alpha(df_year, desc_norm_vars, "DESC_NORM"),
     get_alpha(df_year, pbc_vars,       "PBC")
   ) %>% mutate(year = y)
-}) %>% bind_rows()
+}) %>% 
+  bind_rows()
 
 print(reliability_results)
 
@@ -540,6 +531,7 @@ print("Construct Reliability (CR) and AVE:")
 print(validity_results)
 
 # Extract HTMT for discriminant validity
+# 检验模型里的各个潜变量在统计上是不是两个真正独立、界限分明的概念。
 htmt_results <- lapply(year_levels, function(y) {
   sm <- summary(pls_results[[y]]$pls_fit)
   htmt_mat <- as.data.frame(sm$validity$htmt)
@@ -556,11 +548,7 @@ write.csv(validity_results,    "data_proc/pls_validity_results.csv",    row.name
 write.csv(htmt_results,        "data_proc/pls_htmt_results.csv",        row.names = FALSE)
 cat("Reliability and Validity results saved to data_proc/.\n")
 
-# ----------------------------------------------------------------------------
-# 6. PLS-SEM Path Coefficients and Plot ----
-# ----------------------------------------------------------------------------
-cat("Extracting PLS-SEM path coefficients...\n")
-
+## PLS-SEM Path Coefficients and Plot ----
 # Extract path coefficients directly from pls_fit (no bootstrap, no p-values)
 path_results <- lapply(year_levels, function(y) {
   sm <- summary(pls_results[[y]]$pls_fit)
