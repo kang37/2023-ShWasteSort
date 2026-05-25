@@ -471,11 +471,12 @@ get_alpha <- function(df, vars, label) {
   return(data.frame(Construct = label, Alpha = res$total$raw_alpha))
 }
 
-# Function to fit PLS model per year (no bootstrap for now)
+# 逐年拟合 PLS 并 bootstrap（用于路径系数显著性检验）
+N_BOOT <- 1000
+
 fit_pls_year <- function(df_year, year_label) {
   cat(paste0("  Fitting PLS model for year: ", year_label, "\n"))
 
-  # Convert all model variables to numeric and remove NAs (seminr requires complete cases)
   df_pls <- df_year %>%
     select(all_of(c(model_vars, "wil_of_engage", "seper_recyc"))) %>%
     mutate(across(everything(), as.numeric)) %>%
@@ -483,14 +484,15 @@ fit_pls_year <- function(df_year, year_label) {
     as.data.frame()
   cat(paste0("    Complete cases: ", nrow(df_pls), "\n"))
 
-  pls_fit <- estimate_pls(
+  pls_fit  <- estimate_pls(
     data              = df_pls,
     measurement_model = pls_mm,
     structural_model  = pls_sm,
     inner_weights     = path_weighting
   )
+  boot_fit <- bootstrap_model(pls_fit, nboot = N_BOOT, seed = 42)
 
-  list(pls_fit = pls_fit, boot_fit = NULL, year = year_label)
+  list(pls_fit = pls_fit, boot_fit = boot_fit, df_pls = df_pls, year = year_label)
 }
 
 # Calculate Cronbach's alpha per year
@@ -549,36 +551,92 @@ write.csv(htmt_results,        "data_proc/pls_htmt_results.csv",        row.name
 cat("Reliability and Validity results saved to data_proc/.\n")
 
 ## PLS-SEM Path Coefficients and Plot ----
-# Extract path coefficients directly from pls_fit (no bootstrap, no p-values)
+# 从 bootstrap 结果提取路径系数、标准误、p 值、95% CI
 path_results <- lapply(year_levels, function(y) {
-  sm <- summary(pls_results[[y]]$pls_fit)
-  paths_df <- as.data.frame(sm$paths)
-
-  # Row "R^2" and "AdjR^2" are summary rows; keep only coefficient rows
-  coef_rows <- paths_df[!rownames(paths_df) %in% c("R^2", "AdjR^2"), , drop = FALSE]
-
-  # Reshape: each column is an endogenous variable, each row is a predictor
-  lapply(colnames(coef_rows), function(lhs_var) {
-    col_vals <- coef_rows[[lhs_var]]
-    non_zero <- which(!is.na(col_vals) & col_vals != 0)
-    if (length(non_zero) == 0) return(NULL)
-    tibble(
+  sm <- summary(pls_results[[y]]$boot_fit)
+  bp <- as.data.frame(sm$bootstrapped_paths)
+  bp$path_raw <- rownames(bp)
+  bp %>%
+    transmute(
       year    = y,
-      lhs     = lhs_var,
-      rhs     = rownames(coef_rows)[non_zero],
-      std.all = col_vals[non_zero]
+      # seminr 路径标签格式："RHS  ->  LHS"
+      rhs     = trimws(sub("\\s+->\\s+.*", "", path_raw)),
+      lhs     = trimws(sub(".*->\\s+",     "", path_raw)),
+      beta    = `Bootstrap Mean`,
+      se      = `Bootstrap SD`,
+      ci_low  = `2.5% CI`,
+      ci_high = `97.5% CI`,
+      p_value = `Bootstrap P Val`,
+      sig     = case_when(
+        p_value < .001 ~ "***",
+        p_value < .01  ~ "**",
+        p_value < .05  ~ "*",
+        TRUE           ~ ""
+      )
     )
-  }) %>% bind_rows()
 }) %>% bind_rows()
 
-cat("\nStandardized Path Coefficients (PLS-SEM, no bootstrap):\n")
-print(path_results)
+cat("\nStandardized Path Coefficients (bootstrapped, n=", N_BOOT, "):\n")
+print(as.data.frame(path_results))
 
 write.csv(
   path_results,
   "data_proc/pls_sem_path_coefficients.csv", row.names = FALSE
 )
 cat("PLS-SEM path coefficients saved to data_proc/pls_sem_path_coefficients.csv\n")
+
+## MGA：相邻年份路径系数差异检验 ----
+# estimate_pls_mga() 接口：在两年合并的全样本上拟合模型，
+# 再用逻辑向量 condition（TRUE = 第一年）区分两组。
+cat("\nRunning MGA for adjacent years...\n")
+
+adjacent_pairs <- list(
+  c("2019", "2020"), c("2020", "2021"),
+  c("2021", "2022"), c("2022", "2023"),
+  c("2019", "2023")   # 首尾对比
+)
+
+mga_results <- lapply(adjacent_pairs, function(pair) {
+  ya <- pair[1]; yb <- pair[2]
+  cat(paste0("  MGA: ", ya, " vs ", yb, "\n"))
+
+  df_a <- pls_results[[ya]]$df_pls
+  df_b <- pls_results[[yb]]$df_pls
+
+  # 合并两年数据，在全样本上拟合基础模型
+  df_combined <- bind_rows(df_a, df_b)
+  pls_combined <- estimate_pls(
+    data              = df_combined,
+    measurement_model = pls_mm,
+    structural_model  = pls_sm,
+    inner_weights     = path_weighting
+  )
+
+  # condition：前 nrow(df_a) 行为 TRUE（= 年份 ya）
+  condition <- c(rep(TRUE, nrow(df_a)), rep(FALSE, nrow(df_b)))
+
+  tryCatch({
+    # estimate_pls_mga() 返回值本身就是数据框，列：
+    # source target estimate group1_beta group2_beta diff pls_mga_p
+    mga <- estimate_pls_mga(pls_combined, condition, nboot = N_BOOT)
+    mga$year_a <- ya
+    mga$year_b <- yb
+    mga$sig    <- case_when(
+      mga$pls_mga_p < .001 ~ "***",
+      mga$pls_mga_p < .01  ~ "**",
+      mga$pls_mga_p < .05  ~ "*",
+      TRUE                 ~ ""
+    )
+    as.data.frame(mga)
+  }, error = function(e) {
+    cat("    Error:", conditionMessage(e), "\n"); NULL
+  })
+}) %>% bind_rows()
+
+cat("\nMGA Results (adjacent years):\n")
+print(as.data.frame(mga_results))
+write.csv(mga_results, "data_proc/pls_mga_adjacent.csv", row.names = FALSE)
+cat("MGA results saved to data_proc/pls_mga_adjacent.csv\n")
 
 # Also extract R² per year
 r2_results <- lapply(year_levels, function(y) {
@@ -618,7 +676,8 @@ plot_data_pls_paths <- path_results %>%
       lhs == "seper_recyc"   & rhs == "wil_of_engage" ~ "Intention -> Behavior",
       TRUE ~ "Other"
     ),
-    year_num = as.numeric(year)
+    year_num  = as.numeric(year),
+    sig_shape = p_value < 0.05   # TRUE = 显著（实心），FALSE = 不显著（空心）
   ) %>%
   filter(Path_full != "Other") %>%
   mutate(
@@ -631,26 +690,36 @@ plot_data_pls_paths <- path_results %>%
     ))
   )
 
-# No p-values without bootstrap: all points filled (significance unknown)
-p_pls_paths <- ggplot(plot_data_pls_paths, aes(x = year_num, y = std.all, color = Path_full)) +
+# 实心点 = 显著（p < 0.05），空心点 = 不显著
+p_pls_paths <- ggplot(
+  plot_data_pls_paths,
+  aes(x = year_num, y = beta, color = Path_full)
+) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
+  geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = Path_full),
+              alpha = 0.12, color = NA) +
   geom_line(linewidth = 0.9) +
-  geom_point(size = 3.5, stroke = 1) +
-  facet_wrap(~ Path_full, ncol = 1) +
+  geom_point(aes(shape = sig_shape), size = 3.5, stroke = 1) +
+  geom_text(aes(label = sig), vjust = -1.0, size = 3, show.legend = FALSE) +
+  facet_wrap(~ Path_full, ncol = 1, scales = "free_y") +
   scale_x_continuous(breaks = 2019:2023) +
+  scale_shape_manual(
+    values = c("TRUE" = 16, "FALSE" = 1),   # 16 实心圆，1 空心圆
+    labels = c("TRUE" = "p < .05", "FALSE" = "n.s."),
+    name   = NULL
+  ) +
   scale_color_manual(values = path_colors, guide = "none") +
+  scale_fill_manual(values  = path_colors, guide = "none") +
   labs(
     x = "Year",
-    y = "Standardized Coefficient (PLS-SEM, no bootstrap)"
+    y = paste0("Standardized Coefficient (bootstrap n = ", N_BOOT, ", 95% CI)")
   ) +
   theme_classic(base_size = 9) +
   theme(
-    plot.title = element_text(hjust = 0.5, face = "bold", size = 9, margin = margin(b = 10)),
-    axis.text.x = element_text(angle = 90),
+    axis.text.x      = element_text(angle = 90),
     strip.background = element_rect(fill = "gray85", color = "gray50"),
-    legend.position = "bottom",
-    legend.title = element_blank(),
-    panel.border = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
+    legend.position  = "bottom",
+    panel.border     = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
   )
 
 ggsave("data_proc/pls_model_path_plot.pdf", plot = p_pls_paths, width = 6, height = 10)
