@@ -1,23 +1,15 @@
-# ============================================================================
-# Combined R Analysis Script (PLS-SEM Version)
-# Identical to combined_analysis.R except sections 5 & 6 use PLS-SEM
-# via the `seminr` package instead of CB-SEM (lavaan/WLSMV).
-# ============================================================================
-
-# ----------------------------------------------------------------------------
-# 1. Load Required Packages ----
-# ----------------------------------------------------------------------------
+# Packages ----
 pacman::p_load(
   dplyr, stringr, tidyr, patchwork, ggplot2, corrplot, readxl, purrr, showtext,
   psych, seminr
 )
 showtext::showtext_auto()
 
-# ----------------------------------------------------------------------------
-# 2. Data Loading and Initial Processing (from main_2.R) ----
-# ----------------------------------------------------------------------------
+# Data Loading and Initial Processing ----
+# 各年份问卷问题映射表。
 colname_mapping <- read_excel("data_raw/colname_mapping.xlsx")
 
+# 函数：读取问卷问题映射表，为指定年份生成原始列名到统一英文名的重命名映射向量，使跨年字段名统一。
 create_rename_vector <- function(mapping_df, year) {
   col_year <- paste0("col_", year)
   mapping_year <- mapping_df %>%
@@ -26,6 +18,7 @@ create_rename_vector <- function(mapping_df, year) {
   setNames(mapping_year$old_name, mapping_year$new_name)
 }
 
+# 读取各年份数据。
 years <- 2019:2023
 ws_list <- map2(
   paste0("data_raw/SHWS", years, ".xlsx"),
@@ -39,7 +32,6 @@ ws_list <- map2(
 )
 
 vars_2019_recode <- c(
-  "info_qual_tv", "info_qual_news", "info_qual_web", "info_qual_ad",
   "info_qual_gov", "info_qual_school", "info_qual_street",
   "info_qual_volunteer", "info_qual_neighbor", "info_qual_family",
   "info_qual_property",
