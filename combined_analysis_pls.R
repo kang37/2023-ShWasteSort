@@ -18,61 +18,49 @@ create_rename_vector <- function(mapping_df, year) {
   setNames(mapping_year$old_name, mapping_year$new_name)
 }
 
+# 后续分析所需的全部统一英文列名（bind_rows 前预先筛选，避免跨年类型冲突）
+vars_needed <- c(
+  # 元数据
+  "year", 
+  # 态度 (ATT)
+  "ws_attitude", "ws_interest", "threat",
+  "satis_way_of_sh", "satis_way_of_commu",
+  # 指令性规范 (INJ_NORM)
+  "pr_atten", "regulate_law", "regulate_commu_rule", "if_no_ws_guilty",
+  # 描述性规范 (DESC_NORM)
+  "if_neighbor_ws", "if_family_ws",
+  # 感知行为控制 (PBC)
+  "if_know_method", "if_sign_sort", "category_trouble", "time_cost_troub",
+  # 行为意图与行为
+  "wil_of_engage", "seper_recyc",
+  # 溢出效应变量（仅部分年份存在，用 any_of 处理）
+  "reuse_bag", "energy_concern", "save_energy",
+  "share_often", "freq_online_secondhand", "volun_expr",
+  # 人口统计
+  "gender", "age", "education", "occupation",
+  "income", "family_size", "elder_num",
+  "hukou", "residence_area", "residence_commu"
+)
+
 # 读取各年份数据。
 years <- 2019:2023
-ws_list <- map2(
+ws_full <- map2(
   paste0("data_raw/SHWS", years, ".xlsx"),
   years,
   function(file, year) {
     print(paste("Reading data for year:", year))
     read_excel(file) %>%
       rename(any_of(create_rename_vector(colname_mapping, year))) %>%
-      mutate(year = as.factor(year))
+      mutate(year = as.factor(year)) %>%
+      mutate(across(any_of(c("elder_num", "age")), as.numeric)) %>%
+      select(any_of(vars_needed))
   }
-)
-
-vars_2019_recode <- c(
-  "info_qual_gov", "info_qual_school", "info_qual_street",
-  "info_qual_volunteer", "info_qual_neighbor", "info_qual_family",
-  "info_qual_property",
-  "freq_online_secondhand", "freq_gov", "freq_ngo", "freq_media",
-  "freq_school", "freq_waste_co", "freq_resident", "freq_street",
-  "freq_property", "freq_supervisor",
-  "role_gov", "role_ngo", "role_media", "role_school", "role_waste_co",
-  "role_resident", "role_street", "role_property", "role_supervisor",
-  "support_gov", "support_ngo", "support_media", "support_school",
-  "support_waste_co", "support_resident", "support_street",
-  "support_property", "support_supervisor"
-)
-
-recode_2019_letters <- function(x) {
-  case_when(
-    str_detect(x, "^a") ~ 1,
-    str_detect(x, "^b") ~ 2,
-    str_detect(x, "^c") ~ 3,
-    str_detect(x, "^d") ~ 4,
-    str_detect(x, "^e") ~ 5,
-    x == "-3" | x == -3 ~ NA_real_,
-    TRUE ~ as.numeric(x)
-  )
-}
-
-ws_list[[1]] <- ws_list[[1]] %>%
-  mutate(across(any_of(vars_2019_recode), recode_2019_letters))
-
-ws_list[[2]] <- ws_list[[2]] %>%
-  mutate(across(any_of("elder_num"), as.numeric))
-ws_list[[4]] <- ws_list[[4]] %>%
-  mutate(across(any_of("elder_num"), as.numeric))
-ws_list[[5]] <- ws_list[[5]] %>%
-  mutate(across(any_of("elder_num"), as.numeric))
-ws_list[[4]] <- ws_list[[4]] %>%
-  mutate(across(any_of("age"), as.numeric))
-
-ws_full <- bind_rows(ws_list) %>%
+) %>% 
+  # 合并数据。
+  bind_rows() %>%
   mutate(
     across(
-      .cols = all_of(
+      .cols = any_of(
         colname_mapping %>%
           filter(var_scale5_rev == 1) %>%
           pull(unified_name_en)
@@ -101,6 +89,8 @@ ws_full <- bind_rows(ws_list) %>%
   ) %>%
   mutate(ws_attitude = na_if(ws_attitude, 0))
 
+# 重编码。
+# Bug：是否可以精简？
 ws_full_text <- ws_full %>%
   mutate(
     gender = case_match(as.character(gender), "1" ~ "male", "2" ~ "female"),
@@ -129,9 +119,8 @@ ws_full_text <- ws_full %>%
     )
   )
 
-# 3. Basic Description: Respondents' Demographics (Table Output) ----
+# Respondents' Demographics ----
 table(ws_full$year)
-sum(table(ws_full$year))
 
 order_levels <- list(
   gender = c("male", "female"),
@@ -163,7 +152,9 @@ gene_des_avg <- gene_des_proc %>%
     .groups = 'drop'
   )
 
-demographics_table <- bind_rows(gene_des_proc, gene_des_avg %>% mutate(year = "Average")) %>%
+demographics_table <- bind_rows(
+  gene_des_proc, gene_des_avg %>% mutate(year = "Average")
+) %>%
   select(variable, category, year, percentage) %>%
   pivot_wider(names_from = year, values_from = percentage) %>%
   mutate(
@@ -174,10 +165,12 @@ demographics_table <- bind_rows(gene_des_proc, gene_des_avg %>% mutate(year = "A
   mutate(category = factor(category, levels = order_levels)) %>%
   arrange(variable, category)
 
-write.csv(demographics_table, "data_proc/demographics_table.csv", row.names = FALSE)
+write.csv(
+  demographics_table, "data_proc/demographics_table.csv", row.names = FALSE
+)
 
-# 4. SEM Variables Distribution Plot ----
-
+# SEM Variables Distribution Plot ----
+# Bug: 需要根据SEM实际用到的变量调整该图。
 var_info <- tribble(
   ~var,                  ~label,                          ~latent,
   "satis_way_of_sh",    "Satisfaction with sorting",     "ATT",
