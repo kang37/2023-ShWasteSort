@@ -585,18 +585,15 @@ write.csv(
 )
 cat("PLS-SEM path coefficients saved to data_proc/pls_sem_path_coefficients.csv\n")
 
-## MGA：相邻年份路径系数差异检验 ----
+## MGA：所有年份两两路径系数差异检验 ----
 # estimate_pls_mga() 接口：在两年合并的全样本上拟合模型，
 # 再用逻辑向量 condition（TRUE = 第一年）区分两组。
-cat("\nRunning MGA for adjacent years...\n")
+cat("\nRunning MGA for all year pairs...\n")
 
-adjacent_pairs <- list(
-  c("2019", "2020"), c("2020", "2021"),
-  c("2021", "2022"), c("2022", "2023"),
-  c("2019", "2023")   # 首尾对比
-)
+# 所有年份两两组合，共 C(5,2) = 10 对
+all_pairs <- combn(year_levels, 2, simplify = FALSE)
 
-mga_results <- lapply(adjacent_pairs, function(pair) {
+mga_results <- lapply(all_pairs, function(pair) {
   ya <- pair[1]; yb <- pair[2]
   cat(paste0("  MGA: ", ya, " vs ", yb, "\n"))
 
@@ -633,10 +630,84 @@ mga_results <- lapply(adjacent_pairs, function(pair) {
   })
 }) %>% bind_rows()
 
-cat("\nMGA Results (adjacent years):\n")
+cat("\nMGA Results (all pairs):\n")
 print(as.data.frame(mga_results))
-write.csv(mga_results, "data_proc/pls_mga_adjacent.csv", row.names = FALSE)
-cat("MGA results saved to data_proc/pls_mga_adjacent.csv\n")
+write.csv(mga_results, "data_proc/pls_mga_all_pairs.csv", row.names = FALSE)
+cat("MGA results saved to data_proc/pls_mga_all_pairs.csv\n")
+
+## MGA 热力图：每条路径各年份对的显著性 ----
+path_labels_mga <- c(
+  "INJ_NORM->ATT"          = "Injunctive Norm -> Attitude",
+  "DESC_NORM->ATT"         = "Descriptive Norm -> Attitude",
+  "PBC->ATT"               = "Perceived Control -> Attitude",
+  "ATT->wil_of_engage"     = "Attitude -> Intention",
+  "wil_of_engage->seper_recyc" = "Intention -> Behavior"
+)
+
+heatmap_data <- mga_results %>%
+  mutate(
+    path_key  = paste0(source, "->", target),
+    path_label = path_labels_mga[path_key],
+    # 双向填充：A vs B 和 B vs A 均标注
+    sig_level = case_when(
+      pls_mga_p < .001 ~ "p < .001",
+      pls_mga_p < .01  ~ "p < .01",
+      pls_mga_p < .05  ~ "p < .05",
+      TRUE             ~ "n.s."
+    ),
+    sig_level = factor(sig_level,
+                       levels = c("p < .001", "p < .01", "p < .05", "n.s."))
+  ) %>%
+  filter(!is.na(path_label)) %>%
+  # 对称化：同时生成 (ya, yb) 和 (yb, ya) 两行，排除同年自比
+  { bind_rows(., rename(., year_a = year_b, year_b = year_a)) } %>%
+  filter(year_a != year_b) %>%
+  mutate(
+    path_label = factor(path_label, levels = rev(unname(path_labels_mga)))
+  )
+
+p_mga_heatmap <- ggplot(
+  heatmap_data,
+  aes(x = year_b, y = year_a, fill = sig_level)
+) +
+  geom_tile(color = "white", linewidth = 0.6) +
+  geom_text(
+    aes(label = ifelse(sig_level == "n.s.", "", as.character(sig_level))),
+    size = 2.6, color = "white", fontface = "bold"
+  ) +
+  facet_wrap(~ path_label, ncol = 2) +
+  scale_fill_manual(
+    values = c(
+      "p < .001" = "#C0392B",
+      "p < .01"  = "#E74C3C",
+      "p < .05"  = "#F1948A",
+      "n.s."     = "gray92"
+    ),
+    name = "MGA significance"
+  ) +
+  scale_x_discrete(position = "top") +
+  labs(
+    title    = "PLS-MGA: Path Coefficient Differences Between Years",
+    subtitle = paste0("All C(5,2)=10 year pairs  |  bootstrap n = ", N_BOOT,
+                      "  |  red = significant difference (p < .05)"),
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 9) +
+  theme(
+    plot.title       = element_text(face = "bold", hjust = 0.5, size = 10),
+    plot.subtitle    = element_text(color = "gray40", hjust = 0.5, size = 8),
+    strip.background = element_rect(fill = "gray88", color = "gray65"),
+    strip.text       = element_text(face = "bold", size = 8),
+    axis.text.x      = element_text(angle = 45, hjust = 0),
+    panel.grid       = element_blank(),
+    legend.position  = "bottom"
+  )
+
+ggsave("data_proc/pls_mga_heatmap.pdf", p_mga_heatmap,
+       width = 9, height = 10, device = cairo_pdf)
+ggsave("data_proc/pls_mga_heatmap.png", p_mga_heatmap,
+       width = 9, height = 10, dpi = 180)
+cat("MGA heatmap saved to data_proc/pls_mga_heatmap.pdf / .png\n")
 
 # Also extract R² per year
 r2_results <- lapply(year_levels, function(y) {
