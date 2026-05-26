@@ -465,13 +465,13 @@ pls_sm <- relationships(
   paths(from = "wil_of_engage",                   to = "seper_recyc")
 )
 
-# Function to calculate Cronbach's Alpha for each construct (unchanged)
+# Function to calculate Cronbach's Alpha for each construct
 get_alpha <- function(df, vars, label) {
   res <- psych::alpha(df[, vars], check.keys = TRUE)
   return(data.frame(Construct = label, Alpha = res$total$raw_alpha))
 }
 
-# 逐年拟合 PLS 并 bootstrap（用于路径系数显著性检验）
+# 逐年拟合PLS并bootstrap，后者用于路径系数显著性检验。
 N_BOOT <- 1000
 
 fit_pls_year <- function(df_year, year_label) {
@@ -485,10 +485,10 @@ fit_pls_year <- function(df_year, year_label) {
   cat(paste0("    Complete cases: ", nrow(df_pls), "\n"))
 
   pls_fit  <- estimate_pls(
-    data              = df_pls,
+    data = df_pls,
     measurement_model = pls_mm,
-    structural_model  = pls_sm,
-    inner_weights     = path_weighting
+    structural_model = pls_sm,
+    inner_weights = path_weighting
   )
   boot_fit <- bootstrap_model(pls_fit, nboot = N_BOOT, seed = 42)
 
@@ -673,7 +673,7 @@ p_mga_heatmap <- ggplot(
   geom_tile(color = "white", linewidth = 0.6) +
   geom_text(
     aes(label = ifelse(sig_level == "n.s.", "", as.character(sig_level))),
-    size = 2.6, color = "white", fontface = "bold"
+    color = "white", fontface = "bold"
   ) +
   facet_wrap(~ path_label, ncol = 2) +
   scale_fill_manual(
@@ -692,22 +692,9 @@ p_mga_heatmap <- ggplot(
                       "  |  red = significant difference (p < .05)"),
     x = NULL, y = NULL
   ) +
-  theme_minimal(base_size = 9) +
-  theme(
-    plot.title       = element_text(face = "bold", hjust = 0.5, size = 10),
-    plot.subtitle    = element_text(color = "gray40", hjust = 0.5, size = 8),
-    strip.background = element_rect(fill = "gray88", color = "gray65"),
-    strip.text       = element_text(face = "bold", size = 8),
-    axis.text.x      = element_text(angle = 45, hjust = 0),
-    panel.grid       = element_blank(),
-    legend.position  = "bottom"
-  )
-
-ggsave("data_proc/pls_mga_heatmap.pdf", p_mga_heatmap,
-       width = 9, height = 10, device = cairo_pdf)
+  theme_bw(base_size = 30) 
 ggsave("data_proc/pls_mga_heatmap.png", p_mga_heatmap,
-       width = 9, height = 10, dpi = 180)
-cat("MGA heatmap saved to data_proc/pls_mga_heatmap.pdf / .png\n")
+       width = 14, height = 10, dpi = 180)
 
 # Also extract R² per year
 r2_results <- lapply(year_levels, function(y) {
@@ -740,11 +727,11 @@ path_colors <- c(
 plot_data_pls_paths <- path_results %>%
   mutate(
     Path_full = case_when(
-      lhs == "ATT"           & rhs == "INJ_NORM"      ~ "Injunctive Norm -> Attitude",
-      lhs == "ATT"           & rhs == "DESC_NORM"     ~ "Descriptive Norm -> Attitude",
-      lhs == "ATT"           & rhs == "PBC"           ~ "Perceived Control -> Attitude",
-      lhs == "wil_of_engage" & rhs == "ATT"           ~ "Attitude -> Intention",
-      lhs == "seper_recyc"   & rhs == "wil_of_engage" ~ "Intention -> Behavior",
+      lhs == "ATT"  & rhs == "INJ_NORM" ~ "Injunctive Norm -> Attitude",
+      lhs == "ATT"  & rhs == "DESC_NORM" ~ "Descriptive Norm -> Attitude",
+      lhs == "ATT"  & rhs == "PBC" ~ "Perceived Control -> Attitude",
+      lhs == "wil_of_engage" & rhs == "ATT"  ~ "Attitude -> Intention",
+      lhs == "seper_recyc"  & rhs == "wil_of_engage" ~ "Intention -> Behavior",
       TRUE ~ "Other"
     ),
     year_num  = as.numeric(year),
