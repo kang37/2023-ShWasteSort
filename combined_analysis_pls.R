@@ -784,88 +784,424 @@ ggsave("data_proc/pls_model_path_plot.pdf", plot = p_pls_paths, width = 6, heigh
 cat("PLS-SEM path coefficient plot saved to data_proc/pls_model_path_plot.pdf\n")
 
 # ----------------------------------------------------------------------------
-# 7. Spillover Effect Analysis (unchanged) ----
+# 7. Spillover Effect Analysis ----
+# 研究问题：其他亲环保行为（GreenBehav）对垃圾分类是否存在溢出效应？
+# 双层路径：
+#   Layer 2 – 直接溢出：GreenBehav → seper_recyc（在TPB路径之外的直接预测）
+#   Layer 3 – 机制路径：GreenBehav → ATT（态度认知一致性机制）
+#             + 中介：GreenBehav → ATT → wil_of_engage → seper_recyc
 # ----------------------------------------------------------------------------
 
-get_cor <- function(data, var_x, var_y) {
-  result_list <- lapply(
-    unique(data$year),
-    function(y) {
-      tar_df <- data %>%
-        filter(year == y, !is.na(.data[[var_x]]), !is.na(.data[[var_y]]))
+## 7.0 溢出分析专用变量定义 ----
+# 溢出构念指标（仅2021-2023年有此变量）
+spill_vars  <- c("reuse_bag", "energy_concern", "save_energy")
+spill_years <- c("2021", "2022", "2023")
 
-      if (nrow(tar_df) > 10) {
-        val_x <- tar_df[[var_x]]
-        val_y <- tar_df[[var_y]]
+# 检验变量可用性
+cat("Spillover variable availability by year:\n")
+ws_full %>%
+  group_by(year) %>%
+  summarise(across(all_of(spill_vars), ~ sum(!is.na(.))), .groups = "drop") %>%
+  print()
 
-        unique_x <- unique(val_x[!is.na(val_x)])
-        unique_y <- unique(val_y[!is.na(val_y)])
-        is_binary_x <- length(unique_x) == 2
-        is_binary_y <- length(unique_y) == 2
+## 7.1 辅助函数 ----
 
-        if (is_binary_x || is_binary_y) {
-          if (is_binary_x) {
-            group_var <- val_x
-            test_var  <- val_y
-          } else {
-            group_var <- val_y
-            test_var  <- val_x
-          }
+# 构建PLS用数据框（完整案例）
+make_pls_df <- function(data, year_val, extra_vars = character(0)) {
+  all_v <- c(model_vars, "wil_of_engage", "seper_recyc", extra_vars)
+  data %>%
+    filter(year == year_val) %>%
+    select(all_of(intersect(all_v, names(data)))) %>%
+    mutate(across(everything(), as.numeric)) %>%
+    na.omit() %>%
+    as.data.frame()
+}
 
-          res_wilcox <- wilcox.test(test_var ~ group_var)
-          p_val <- res_wilcox$p.value
-          n1 <- sum(group_var == unique(group_var)[1])
-          n2 <- sum(group_var == unique(group_var)[2])
-          w_stat <- res_wilcox$statistic
-          est <- (2 * w_stat / (n1 * n2)) - 1
-          method_tag <- "Wilcoxon (Rank-Biserial r)"
-        } else {
-          res_stat   <- cor.test(val_x, val_y, method = "kendall")
-          est        <- res_stat$estimate
-          p_val      <- res_stat$p.value
-          method_tag <- "Kendall's Tau"
-        }
+# 从bootstrap结果提取路径系数
+extract_paths_boot <- function(boot_sum, year_val, model_tag) {
+  bp <- as.data.frame(boot_sum$bootstrapped_paths)
+  bp$path_label <- rownames(bp)
+  bp %>%
+    transmute(
+      year    = year_val,
+      model   = model_tag,
+      path    = path_label,
+      beta    = `Bootstrap Mean`,
+      se      = `Bootstrap SD`,
+      ci_low  = `2.5% CI`,
+      ci_high = `97.5% CI`,
+      p_value = `Bootstrap P Val`
+    )
+}
 
-        res <- tibble(
-          year = y, var_1 = var_x, var_2 = var_y,
-          correlation_estimate = est, p_value = p_val, method = method_tag
-        )
-      } else {
-        res <- tibble(
-          year = y, var_1 = var_x, var_2 = var_y,
-          correlation_estimate = NA_real_, p_value = NA_real_,
-          method = "Insufficient data"
-        )
-      }
-      return(res)
+sig_star <- function(p) case_when(
+  p < .001 ~ "***", p < .01 ~ "**", p < .05 ~ "*", TRUE ~ ""
+)
+
+## 7.2 Layer 1 – 描述性相关（Kendall's tau）----
+cat("=== Layer 1: Descriptive correlations ===\n")
+
+get_cor_kendall <- function(data, var_x, var_y) {
+  lapply(levels(data$year), function(y) {
+    df <- data %>%
+      filter(year == y, !is.na(.data[[var_x]]), !is.na(.data[[var_y]]))
+    if (nrow(df) < 10) {
+      return(tibble(year = y, var_from = var_x, var_to = var_y,
+                    tau = NA_real_, p_value = NA_real_, n = nrow(df)))
     }
-  ) %>%
-    bind_rows() %>%
-    mutate(p_significance = case_when(
-      p_value < 0.001 ~ "***",
-      p_value < 0.01  ~ "**",
-      p_value < 0.05  ~ "*",
-      TRUE            ~ ""
-    ))
+    ct <- cor.test(df[[var_x]], df[[var_y]], method = "kendall")
+    tibble(year = y, var_from = var_x, var_to = var_y,
+           tau = ct$estimate, p_value = ct$p.value, n = nrow(df))
+  }) %>% bind_rows()
 }
 
-waste_sorting_vars  <- c("seper_recyc")
-other_env_behaviors <- c("reuse_bag", "energy_concern", "save_energy",
-                         "share_often", "freq_online_secondhand", "volun_expr")
+layer1_cor <- bind_rows(
+  lapply(c("wil_of_engage", "seper_recyc"), function(ws) {
+    lapply(spill_vars, function(sp) get_cor_kendall(ws_full, sp, ws)) %>% bind_rows()
+  })
+) %>%
+  mutate(sig = sig_star(p_value))
 
-all_spillover_results <- list()
-spillover_counter <- 1
+print(layer1_cor)
+write.csv(layer1_cor, "data_proc/spillover_correlation_table.csv", row.names = FALSE)
 
-for (ws_var in waste_sorting_vars) {
-  for (env_var in other_env_behaviors) {
-    cat(paste0("Calculating correlation between ", ws_var, " and ", env_var, "...\n"))
-    current_cor_results <- get_cor(ws_full, ws_var, env_var)
-    all_spillover_results[[spillover_counter]] <- current_cor_results
-    spillover_counter <- spillover_counter + 1
+## 7.3 PLS测量模型（含GreenBehav复合构念）----
+# GreenBehav：formative composite（相关权重），三种不同行为不宜用reflective
+pls_mm_spill <- constructs(
+  reflective("ATT",            att_vars),
+  reflective("INJ_NORM",       inj_norm_vars),
+  reflective("DESC_NORM",      desc_norm_vars),
+  reflective("PBC",            pbc_vars),
+  composite("GreenBehav",      spill_vars, weights = correlation_weights),
+  reflective("wil_of_engage",  single_item("wil_of_engage")),
+  reflective("seper_recyc",    single_item("seper_recyc"))
+)
+
+## 7.4 M_base：在2021-2023上复现M7（用于比较基准）----
+cat("=== Fitting M_base (M7 replication, 2021-2023) ===\n")
+
+pls_mm_base <- constructs(
+  reflective("ATT",            att_vars),
+  reflective("INJ_NORM",       inj_norm_vars),
+  reflective("DESC_NORM",      desc_norm_vars),
+  reflective("PBC",            pbc_vars),
+  reflective("wil_of_engage",  single_item("wil_of_engage")),
+  reflective("seper_recyc",    single_item("seper_recyc"))
+)
+pls_sm_base <- relationships(
+  paths(from = c("INJ_NORM", "DESC_NORM", "PBC"), to = "ATT"),
+  paths(from = "ATT",           to = "wil_of_engage"),
+  paths(from = "wil_of_engage", to = "seper_recyc")
+)
+
+base_results <- lapply(spill_years, function(y) {
+  cat("  Year:", y, "\n")
+  df <- make_pls_df(ws_full, y)
+  cat("    n =", nrow(df), "\n")
+  fit  <- estimate_pls(df, pls_mm_base, pls_sm_base, inner_weights = path_weighting)
+  boot <- bootstrap_model(fit, nboot = N_BOOT, seed = 42)
+  list(fit = fit, boot = boot, year = y)
+})
+names(base_results) <- spill_years
+
+base_paths <- lapply(spill_years, function(y) {
+  extract_paths_boot(summary(base_results[[y]]$boot), y, "M_base")
+}) %>% bind_rows() %>% mutate(sig = sig_star(p_value))
+
+cat("\nM_base path coefficients:\n")
+print(as.data.frame(base_paths %>% select(year, path, beta, se, p_value, sig)))
+
+## 7.5 Layer 2 – M_spill_direct：GreenBehav → seper_recyc（直接溢出）----
+cat("\n=== Layer 2: M_spill_direct – GreenBehav -> seper_recyc ===\n")
+
+pls_sm_direct <- relationships(
+  paths(from = c("INJ_NORM", "DESC_NORM", "PBC"), to = "ATT"),
+  paths(from = "ATT",           to = "wil_of_engage"),
+  paths(from = "wil_of_engage", to = "seper_recyc"),
+  paths(from = "GreenBehav",    to = "seper_recyc")   # 直接溢出路径
+)
+
+direct_results <- lapply(spill_years, function(y) {
+  cat("  Year:", y, "\n")
+  df <- make_pls_df(ws_full, y, extra_vars = spill_vars)
+  cat("    n =", nrow(df), "\n")
+  fit  <- estimate_pls(df, pls_mm_spill, pls_sm_direct, inner_weights = path_weighting)
+  boot <- bootstrap_model(fit, nboot = N_BOOT, seed = 42)
+  list(fit = fit, boot = boot, year = y)
+})
+names(direct_results) <- spill_years
+
+direct_paths <- lapply(spill_years, function(y) {
+  extract_paths_boot(summary(direct_results[[y]]$boot), y, "M_spill_direct")
+}) %>% bind_rows() %>% mutate(sig = sig_star(p_value))
+
+cat("\nM_spill_direct path coefficients:\n")
+print(as.data.frame(direct_paths %>% select(year, path, beta, se, p_value, sig)))
+
+## 7.6 Layer 3a – M_spill_att：GreenBehav → ATT（态度溢出）----
+cat("\n=== Layer 3a: M_spill_att – GreenBehav -> ATT ===\n")
+
+pls_sm_att <- relationships(
+  paths(from = c("INJ_NORM", "DESC_NORM", "PBC"), to = "ATT"),
+  paths(from = "GreenBehav",    to = "ATT"),           # 态度溢出路径
+  paths(from = "ATT",           to = "wil_of_engage"),
+  paths(from = "wil_of_engage", to = "seper_recyc")
+)
+
+att_results <- lapply(spill_years, function(y) {
+  cat("  Year:", y, "\n")
+  df <- make_pls_df(ws_full, y, extra_vars = spill_vars)
+  fit  <- estimate_pls(df, pls_mm_spill, pls_sm_att, inner_weights = path_weighting)
+  boot <- bootstrap_model(fit, nboot = N_BOOT, seed = 42)
+  list(fit = fit, boot = boot, year = y)
+})
+names(att_results) <- spill_years
+
+att_paths <- lapply(spill_years, function(y) {
+  extract_paths_boot(summary(att_results[[y]]$boot), y, "M_spill_att")
+}) %>% bind_rows() %>% mutate(sig = sig_star(p_value))
+
+cat("\nM_spill_att path coefficients:\n")
+print(as.data.frame(att_paths %>% select(year, path, beta, se, p_value, sig)))
+
+## 7.7 Layer 3b – M_spill_full：两条溢出路径同时纳入（完整模型）----
+cat("\n=== Layer 3b: M_spill_full – GreenBehav -> ATT + GreenBehav -> seper_recyc ===\n")
+
+pls_sm_full <- relationships(
+  paths(from = c("INJ_NORM", "DESC_NORM", "PBC"), to = "ATT"),
+  paths(from = "GreenBehav",    to = "ATT"),
+  paths(from = "ATT",           to = "wil_of_engage"),
+  paths(from = "wil_of_engage", to = "seper_recyc"),
+  paths(from = "GreenBehav",    to = "seper_recyc")
+)
+
+full_results <- lapply(spill_years, function(y) {
+  cat("  Year:", y, "\n")
+  df <- make_pls_df(ws_full, y, extra_vars = spill_vars)
+  fit  <- estimate_pls(df, pls_mm_spill, pls_sm_full, inner_weights = path_weighting)
+  boot <- bootstrap_model(fit, nboot = N_BOOT, seed = 42)
+  list(fit = fit, boot = boot, year = y)
+})
+names(full_results) <- spill_years
+
+full_paths <- lapply(spill_years, function(y) {
+  extract_paths_boot(summary(full_results[[y]]$boot), y, "M_spill_full")
+}) %>% bind_rows() %>% mutate(sig = sig_star(p_value))
+
+cat("\nM_spill_full path coefficients:\n")
+print(as.data.frame(full_paths %>% select(year, path, beta, se, p_value, sig)))
+
+## 7.8 中介效应（bootstrapped indirect effects）----
+# M_spill_full中的中介路径：
+#   完整间接：GreenBehav → ATT → wil_of_engage → seper_recyc
+#   部分间接：GreenBehav → ATT → wil_of_engage
+cat("\n=== Mediation: indirect effects of GreenBehav via ATT ===\n")
+
+# specific_effect_significance() 返回 matrix [1,7]，列名含 "Bootstrap Mean" 等
+parse_ie <- function(ie_mat, year_val, path_label) {
+  if (is.null(ie_mat)) return(NULL)
+  tibble(
+    year    = year_val,
+    path    = path_label,
+    beta    = ie_mat[1, "Bootstrap Mean"],
+    se      = ie_mat[1, "Bootstrap SD"],
+    ci_low  = ie_mat[1, "2.5% CI"],
+    ci_high = ie_mat[1, "97.5% CI"],
+    p_value = ie_mat[1, "Bootstrap P Val"]
+  )
+}
+
+mediation_results <- lapply(spill_years, function(y) {
+  boot <- full_results[[y]]$boot
+
+  ie_full <- tryCatch(
+    specific_effect_significance(
+      boot, from = "GreenBehav",
+      through = c("ATT", "wil_of_engage"), to = "seper_recyc", alpha = 0.05
+    ),
+    error = function(e) { cat("  IE full error:", conditionMessage(e), "\n"); NULL }
+  )
+  ie_att_bi <- tryCatch(
+    specific_effect_significance(
+      boot, from = "GreenBehav",
+      through = "ATT", to = "wil_of_engage", alpha = 0.05
+    ),
+    error = function(e) { cat("  IE att->BI error:", conditionMessage(e), "\n"); NULL }
+  )
+
+  bind_rows(
+    parse_ie(ie_full,   y, "GreenBehav -> ATT -> BI -> BEH (indirect)"),
+    parse_ie(ie_att_bi, y, "GreenBehav -> ATT -> BI (indirect)")
+  )
+}) %>% bind_rows() %>% mutate(sig = sig_star(p_value))
+
+cat("\nIndirect (mediated) effects:\n")
+print(as.data.frame(mediation_results))
+
+## 7.9 汇总输出 ----
+all_paths <- bind_rows(base_paths, direct_paths, att_paths, full_paths)
+
+# 关键溢出路径（GreenBehav相关）
+key_paths <- all_paths %>%
+  filter(grepl("GreenBehav", path)) %>%
+  select(model, year, path, beta, se, ci_low, ci_high, p_value, sig) %>%
+  arrange(path, model, year)
+
+cat("\n=== Key spillover path coefficients (GreenBehav paths across models) ===\n")
+print(as.data.frame(key_paths))
+
+# R² 各模型对比
+r2_comparison <- lapply(spill_years, function(y) {
+  extract_r2 <- function(res_list, model_tag) {
+    sm <- summary(res_list[[y]]$fit)
+    r2 <- as.data.frame(sm$paths)["R^2", , drop = FALSE]
+    data.frame(
+      year = y, model = model_tag,
+      Construct = colnames(r2), R2 = as.numeric(r2)
+    ) %>% filter(!is.na(R2), R2 > 0)
   }
+  bind_rows(
+    extract_r2(base_results,   "M_base"),
+    extract_r2(direct_results, "M_spill_direct"),
+    extract_r2(att_results,    "M_spill_att"),
+    extract_r2(full_results,   "M_spill_full")
+  )
+}) %>% bind_rows()
+
+cat("\n=== R2 comparison across models ===\n")
+print(as.data.frame(r2_comparison %>% tidyr::pivot_wider(names_from = model, values_from = R2)))
+
+write.csv(all_paths,         "data_proc/spillover_all_paths.csv",         row.names = FALSE)
+write.csv(key_paths,         "data_proc/spillover_key_paths.csv",         row.names = FALSE)
+write.csv(mediation_results, "data_proc/spillover_mediation.csv",         row.names = FALSE)
+write.csv(r2_comparison,     "data_proc/spillover_r2_comparison.csv",     row.names = FALSE)
+cat("Spillover CSVs saved to data_proc/.\n")
+
+## 7.10 图形输出 ----
+cat("\nGenerating spillover plots...\n")
+
+# 图1：Layer 1 相关系数（Kendall's tau）
+p_layer1 <- layer1_cor %>%
+  filter(!is.na(tau)) %>%
+  mutate(
+    var_from = recode(var_from,
+      reuse_bag      = "Reuse bag",
+      energy_concern = "Energy concern",
+      save_energy    = "Save water/energy"
+    ),
+    var_to = recode(var_to,
+      wil_of_engage = "Intention",
+      seper_recyc   = "Behavior"
+    ),
+    sig_label = paste0(round(tau, 2), sig)
+  ) %>%
+  ggplot(aes(x = year, y = tau, fill = var_from)) +
+  geom_col(position = "dodge", width = 0.7) +
+  geom_text(aes(label = sig_label), position = position_dodge(0.7),
+            vjust = -0.3, size = 2.5) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  facet_wrap(~ var_to) +
+  scale_fill_manual(values = c("#4DBBD5", "#00A087", "#E64B35")) +
+  labs(
+    title = "Layer 1: Correlations between green behaviours and waste sorting",
+    x = "Year", y = "Kendall's tau", fill = "Green behaviour"
+  ) +
+  theme_classic(base_size = 9) +
+  theme(legend.position = "bottom",
+        strip.background = element_rect(fill = "gray90"))
+
+ggsave("data_proc/spillover_layer1_correlations.pdf", p_layer1, width = 8, height = 4)
+
+# 图2：GreenBehav溢出路径系数（Layer 2/3，各模型年份比较）
+p_spill_paths <- key_paths %>%
+  mutate(
+    path_clean = case_when(
+      grepl("seper_recyc", path) ~ "GreenBehav -> Behavior (direct)",
+      grepl("ATT",         path) ~ "GreenBehav -> Attitude",
+      TRUE ~ path
+    ),
+    model = factor(model,
+      levels = c("M_spill_direct", "M_spill_att", "M_spill_full"),
+      labels = c("Direct only", "Attitudinal only", "Full (both)")),
+    year_num = as.numeric(year)
+  ) %>%
+  ggplot(aes(x = year_num, y = beta, color = model, group = model)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
+  geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = model), alpha = 0.12, color = NA) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 3, stroke = 1) +
+  facet_wrap(~ path_clean, ncol = 1, scales = "free_y") +
+  scale_x_continuous(breaks = 2021:2023) +
+  scale_color_manual(values = c("#E64B35", "#4DBBD5", "#3C5488")) +
+  scale_fill_manual(values  = c("#E64B35", "#4DBBD5", "#3C5488")) +
+  labs(
+    title = "Layer 2/3: Spillover path coefficients (bootstrapped, 95% CI)",
+    x = "Year", y = "Standardised beta", color = "Model", fill = "Model"
+  ) +
+  theme_classic(base_size = 9) +
+  theme(
+    legend.position  = "bottom",
+    strip.background = element_rect(fill = "gray90"),
+    panel.border     = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
+  )
+
+ggsave("data_proc/spillover_layer23_paths.pdf", p_spill_paths, width = 7, height = 6)
+
+# 图3：R² 提升（各模型对 seper_recyc 的解释方差）
+p_r2_lift <- r2_comparison %>%
+  filter(Construct == "seper_recyc") %>%
+  mutate(
+    model = factor(model,
+      levels = c("M_base", "M_spill_att", "M_spill_direct", "M_spill_full"),
+      labels = c("M_base\n(TPB only)", "M_spill_att\n(+GB->ATT)",
+                 "M_spill_direct\n(+GB->BEH)", "M_spill_full\n(+both)"))
+  ) %>%
+  ggplot(aes(x = year, y = R2, fill = model)) +
+  geom_col(position = "dodge", width = 0.7) +
+  geom_text(aes(label = round(R2, 3)), position = position_dodge(0.7),
+            vjust = -0.3, size = 2.5) +
+  scale_fill_manual(values = c("gray60", "#4DBBD5", "#E64B35", "#3C5488")) +
+  labs(
+    title = "R2 for seper_recyc (behavior) across spillover models",
+    x = "Year", y = "R2", fill = "Model"
+  ) +
+  theme_classic(base_size = 9) +
+  theme(legend.position = "bottom")
+
+ggsave("data_proc/spillover_r2_lift.pdf", p_r2_lift, width = 7, height = 4)
+
+# 图4：中介效应
+if (nrow(mediation_results) > 0) {
+  p_mediation <- mediation_results %>%
+    mutate(path_wrap = str_wrap(path, 30), year_num = as.numeric(year)) %>%
+    ggplot(aes(x = year_num, y = beta, color = path_wrap, group = path_wrap)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+    geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = path_wrap),
+                alpha = 0.15, color = NA) +
+    geom_line(linewidth = 0.9) +
+    geom_point(size = 3) +
+    scale_x_continuous(breaks = 2021:2023) +
+    scale_color_manual(values = c("#4DBBD5", "#E64B35")) +
+    scale_fill_manual(values  = c("#4DBBD5", "#E64B35")) +
+    labs(
+      title = "Mediation: indirect effects of GreenBehav via ATT",
+      x = "Year", y = "Indirect effect (bootstrapped)", 
+      color = NULL, fill = NULL
+    ) +
+    theme_classic(base_size = 9) +
+    theme(legend.position = "bottom")
+
+  ggsave("data_proc/spillover_mediation_plot.pdf", p_mediation, width = 7, height = 4)
 }
 
-final_spillover_table <- bind_rows(all_spillover_results) %>%
-  arrange(var_1, var_2, year)
-
-write.csv(final_spillover_table, "data_proc/spillover_correlation_table.csv", row.names = FALSE)
+cat("\n=== Spillover analysis complete ===\n")
+cat("Output files saved to data_proc/:\n")
+cat("  spillover_correlation_table.csv\n")
+cat("  spillover_all_paths.csv\n")
+cat("  spillover_key_paths.csv\n")
+cat("  spillover_mediation.csv\n")
+cat("  spillover_r2_comparison.csv\n")
+cat("  spillover_layer1_correlations.pdf\n")
+cat("  spillover_layer23_paths.pdf\n")
+cat("  spillover_r2_lift.pdf\n")
+cat("  spillover_mediation_plot.pdf\n")
