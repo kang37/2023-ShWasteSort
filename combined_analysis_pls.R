@@ -772,7 +772,7 @@ p_pls_paths <- ggplot(
     x = "Year",
     y = paste0("Standardized Coefficient (bootstrap n = ", N_BOOT, ", 95% CI)")
   ) +
-  theme_classic(base_size = 9) +
+  theme_classic(base_size = 20) +
   theme(
     axis.text.x      = element_text(angle = 90),
     strip.background = element_rect(fill = "gray85", color = "gray50"),
