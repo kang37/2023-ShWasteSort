@@ -14,7 +14,7 @@ pacman::p_load(
 )
 showtext::showtext_auto()
 
-out_dir <- file.path("data_proc", format(Sys.time(), "result_%Y%m%d_%H%M%S"))
+out_dir <- file.path("data_proc", format(Sys.time(), "result_%Y%m%d"))
 dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
 cat("Output directory:", out_dir, "\n\n")
 
@@ -395,13 +395,12 @@ reliability_results <- lapply(year_levels, function(y) {
 }) %>% bind_rows()
 
 print(reliability_results)
-write.csv(reliability_results, file.path(out_dir, "pls_reliability_results.csv"), row.names = FALSE)
 
 reliability_wide <- reliability_results %>%
+  mutate(Metric = "Alpha") %>%
   pivot_wider(names_from = year, values_from = Alpha) %>%
-  mutate(across(where(is.numeric), ~ round(.x, 3)))
-write.csv(reliability_wide, file.path(out_dir, "pls_reliability_results_wide.csv"), row.names = FALSE)
-cat("Saved: pls_reliability_results_wide.csv\n")
+  mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+  select(Metric, Construct, everything())
 
 # ============================================================================
 # 6. 逐年拟合PLS + Bootstrap
@@ -448,8 +447,7 @@ htmt_results <- lapply(year_levels, function(y) {
 print("CR and AVE:"); print(as.data.frame(validity_results))
 print("HTMT:");       print(as.data.frame(htmt_results))
 
-write.csv(validity_results, file.path(out_dir, "pls_validity_results.csv"),    row.names = FALSE)
-write.csv(htmt_results,     file.path(out_dir, "pls_htmt_results.csv"),        row.names = FALSE)
+write.csv(htmt_results, file.path(out_dir, "pls_htmt_results.csv"), row.names = FALSE)
 
 validity_wide <- validity_results %>%
   pivot_longer(cols = c(CR, AVE), names_to = "Metric", values_to = "value") %>%
@@ -457,8 +455,11 @@ validity_wide <- validity_results %>%
   pivot_wider(names_from = year, values_from = value) %>%
   select(Metric, Construct, everything()) %>%
   arrange(Metric, Construct)
-write.csv(validity_wide, file.path(out_dir, "pls_validity_results_wide.csv"), row.names = FALSE)
-cat("Saved: pls_validity_results_wide.csv\n")
+
+pls_measurement_wide <- bind_rows(reliability_wide, validity_wide) %>%
+  arrange(Construct, Metric)
+write.csv(pls_measurement_wide, file.path(out_dir, "pls_measurement_results_wide.csv"), row.names = FALSE)
+cat("Saved: pls_measurement_results_wide.csv\n")
 
 # ============================================================================
 # 8. 路径系数（Bootstrap）
