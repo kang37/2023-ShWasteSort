@@ -592,37 +592,61 @@ y_scales <- lapply(seq_along(path_order), function(i) {
 
 fill_values <- c(setNames(unname(path_colors), names(path_colors)), ns = "white")
 
-p_paths <- ggplot(plot_data, aes(x = year_num, y = beta, color = Path_full)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
-  geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = Path_full),
-              alpha = 0.12, color = NA) +
-  geom_line(linewidth = 0.9) +
-  geom_point(aes(fill = point_fill), shape = 21, size = 3.5, stroke = 1) +
-  geom_text(aes(label = sig), vjust = -1.0, size = 3, show.legend = FALSE) +
-  facet_wrap(~ Path_full, ncol = 1, scales = "free_y") +
-  ggh4x::facetted_pos_scales(y = y_scales) +
-  ggh4x::force_panelsizes(rows = unit(panel_heights, "in")) +
-  scale_x_continuous(breaks = 2019:2023) +
-  scale_color_manual(values = path_colors, guide = "none") +
-  scale_fill_manual(values = fill_values, guide = "none") +
-  labs(
+# 路径分组（三列）
+col_blue  <- c("Desc. Norm -> Attitude", "Desc. Norm -> PBC", "PBC -> Attitude")
+col_green <- c("Desc. Norm -> Intention", "PBC -> Intention", "Attitude -> Intention")
+col_red   <- c("Intention -> Behavior", "PBC -> Behavior (direct)")
+
+make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, x_breaks) {
+  d <- data %>% filter(Path_full %in% paths_in_col) %>%
+    mutate(Path_full = factor(Path_full, levels = paths_in_col))
+  r <- ranges %>% filter(Path_full %in% paths_in_col) %>%
+    slice(match(paths_in_col, Path_full))
+  ph <- r$span * HEIGHT_UNIT
+  ys <- lapply(seq_along(paths_in_col), function(i) {
+    ri  <- r[i, ]
+    brk <- pretty(c(ri$ylo, ri$yhi), n = if (ri$span > 0.6) 5 else 4)
+    brk <- brk[brk >= ri$ylo & brk <= ri$yhi]
+    scale_y_continuous(limits = c(ri$ylo, ri$yhi), breaks = brk)
+  })
+  p <- ggplot(d, aes(x = year_num, y = beta, color = Path_full)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
+    geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = Path_full),
+                alpha = 0.12, color = NA) +
+    geom_line(linewidth = 0.9) +
+    geom_point(aes(fill = point_fill), shape = 21, size = 3.5, stroke = 1) +
+    geom_text(aes(label = sig), vjust = -1.0, size = 3, show.legend = FALSE) +
+    facet_wrap(~ Path_full, ncol = 1, scales = "free_y") +
+    ggh4x::facetted_pos_scales(y = ys) +
+    ggh4x::force_panelsizes(rows = unit(ph, "in")) +
+    scale_x_continuous(breaks = x_breaks) +
+    scale_color_manual(values = path_colors, guide = "none") +
+    scale_fill_manual(values = fill_values, guide = "none") +
+    labs(x = "Year", y = "Standardized Coefficient") +
+    theme_classic(base_size = 9) +
+    theme(
+      axis.text.x      = element_text(angle = 90),
+      strip.background = element_rect(fill = "gray85", color = "gray50"),
+      panel.border     = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
+    )
+  list(plot = p, height = sum(ph))
+}
+
+col1 <- make_path_col(col_blue,  plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023)
+col2 <- make_path_col(col_green, plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023)
+col3 <- make_path_col(col_red,   plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023)
+
+p_paths <- col1$plot + col2$plot + col3$plot +
+  patchwork::plot_layout(ncol = 3) +
+  patchwork::plot_annotation(
     title    = "Alt Model: DESC_NORM / PBC / ATT fully connected + direct to BEH",
     subtitle = paste0("Bootstrap n = ", N_BOOT,
-                      "  |  filled = p < .05, white = n.s.  |  Consistent y-axis scale"),
-    x = "Year",
-    y = "Standardized Coefficient (bootstrap n = 1000, 95% CI)"
-  ) +
-  theme_classic(base_size = 9) +
-  theme(
-    axis.text.x      = element_text(angle = 90),
-    strip.background = element_rect(fill = "gray85", color = "gray50"),
-    legend.position  = "bottom",
-    panel.border     = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
+                      "  |  filled = p < .05, white = n.s.  |  Consistent y-axis scale")
   )
 
-total_height <- sum(panel_heights) + 2.5  # +2.5 留给标题/图例/坐标轴标签
+total_height <- max(col1$height, col2$height, col3$height) + 2.5
 ggsave(file.path(out_dir, "pls_model_path_plot.pdf"), plot = p_paths,
-       width = 4, height = total_height)
+       width = 12, height = total_height)
 cat("Saved: pls_model_path_plot.pdf\n")
 
 # ============================================================================
@@ -918,36 +942,112 @@ p_layer1 <- layer1_cor %>%
 
 ggsave(file.path(out_dir, "spillover_layer1_correlations.pdf"), p_layer1, width = 8, height = 4)
 
-## Layer 2/3 路径图
-p_spill_paths <- key_paths %>%
-  mutate(
-    path_clean = case_when(
-      grepl("wil_of_engage", path) ~ "GreenBehav -> Intention",
-      grepl("seper_recyc",   path) ~ "GreenBehav -> Behavior (direct)",
-      TRUE ~ path
-    ),
-    model = factor(model,
-      levels = c("M_spill_bi", "M_spill_direct", "M_spill_full"),
-      labels = c("Via intention", "Direct only", "Full (both)")),
-    year_num = as.numeric(year)
-  ) %>%
-  ggplot(aes(x = year_num, y = beta, color = model, group = model)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
-  geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = model), alpha = 0.12, color = NA) +
-  geom_line(linewidth = 0.9) +
-  geom_point(size = 3, stroke = 1) +
-  facet_wrap(~ path_clean, ncol = 1, scales = "free_y") +
-  scale_x_continuous(breaks = 2021:2023) +
-  scale_color_manual(values = c("#E64B35", "#4DBBD5", "#3C5488")) +
-  scale_fill_manual(values  = c("#E64B35", "#4DBBD5", "#3C5488")) +
-  labs(title = "Layer 2/3: Spillover path coefficients (bootstrapped, 95% CI)",
-       x = "Year", y = "Standardised beta", color = "Model", fill = "Model") +
-  theme_classic(base_size = 9) +
-  theme(legend.position = "bottom",
-        strip.background = element_rect(fill = "gray90"),
-        panel.border = element_rect(color = "gray50", fill = NA, linewidth = 0.5))
+## Layer 2/3 溢出路径图：3列（模型）× N行（路径），空面板留白
+spill_model_colors <- c(
+  "M_spill_bi"     = "#4DBBD5",
+  "M_spill_direct" = "#E64B35",
+  "M_spill_full"   = "#3C5488"
+)
+spill_model_labels <- c(
+  "M_spill_bi"     = "Via Intention",
+  "M_spill_direct" = "Direct Only",
+  "M_spill_full"   = "Full (Both)"
+)
 
-ggsave(file.path(out_dir, "spillover_layer23_paths.pdf"), p_spill_paths, width = 7, height = 6)
+spill_path_labels <- c(
+  "DESC_NORM->ATT"             = "Desc. Norm -> Attitude",
+  "DESC_NORM->PBC"             = "Desc. Norm -> PBC",
+  "PBC->ATT"                   = "PBC -> Attitude",
+  "DESC_NORM->wil_of_engage"   = "Desc. Norm -> Intention",
+  "PBC->wil_of_engage"         = "PBC -> Intention",
+  "ATT->wil_of_engage"         = "Attitude -> Intention",
+  "wil_of_engage->seper_recyc" = "Intention -> Behavior",
+  "PBC->seper_recyc"           = "PBC -> Behavior (direct)",
+  "GreenBehav->wil_of_engage"  = "GreenBehav -> Intention",
+  "GreenBehav->seper_recyc"    = "GreenBehav -> Behavior"
+)
+
+# 路径行顺序
+spill_path_order <- c(
+  "Desc. Norm -> Attitude", "Desc. Norm -> PBC", "PBC -> Attitude",
+  "Desc. Norm -> Intention", "PBC -> Intention", "Attitude -> Intention",
+  "Intention -> Behavior", "PBC -> Behavior (direct)",
+  "GreenBehav -> Intention", "GreenBehav -> Behavior"
+)
+
+all_spill_colors <- c(
+  path_colors,
+  "GreenBehav -> Intention" = "#4DBBD5",
+  "GreenBehav -> Behavior"  = "#E64B35"
+)
+all_spill_fill <- c(all_spill_colors, ns = "white")
+
+# 整理所有模型路径数据（含M_base）
+spill_model_all_labels <- c("M_base" = "Base Model", spill_model_labels)
+
+spill_plot_data <- all_spill_paths %>%
+  filter(model %in% names(spill_model_all_labels)) %>%
+  mutate(
+    path_key   = trimws(gsub("  ->  ", "->", path)),
+    Path_full  = factor(spill_path_labels[path_key], levels = spill_path_order),
+    model_lab  = factor(spill_model_all_labels[model], levels = unname(spill_model_all_labels)),
+    year_num   = as.numeric(year),
+    sig_shape  = p_value < 0.05,
+    point_fill = if_else(sig_shape, as.character(Path_full), "ns")
+  ) %>%
+  filter(!is.na(Path_full))
+
+# 全局统一Y轴范围（所有路径、所有模型）
+global_ylo <- min(spill_plot_data$ci_low,  na.rm = TRUE)
+global_yhi <- max(spill_plot_data$ci_high, na.rm = TRUE)
+global_pad <- (global_yhi - global_ylo) * 0.10
+global_ylim <- c(global_ylo - global_pad, global_yhi + global_pad)
+global_brk  <- pretty(global_ylim, n = 6)
+global_brk  <- global_brk[global_brk >= global_ylim[1] & global_brk <= global_ylim[2]]
+global_span <- diff(global_ylim)
+
+n_rows   <- length(spill_path_order)
+n_cols   <- length(spill_model_all_labels)
+panel_h_spill <- rep(global_span * HEIGHT_UNIT, n_rows)
+
+y_scales_spill <- rep(
+  list(scale_y_continuous(limits = global_ylim, breaks = global_brk)),
+  n_rows * n_cols
+)
+
+p_spill_paths <- ggplot(spill_plot_data,
+                         aes(x = year_num, y = beta, color = Path_full)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
+  geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = Path_full),
+              alpha = 0.12, color = NA) +
+  geom_line(linewidth = 0.9) +
+  geom_point(aes(fill = point_fill), shape = 21, size = 3.5, stroke = 1) +
+  geom_text(aes(label = sig), vjust = -1.0, size = 3, show.legend = FALSE) +
+  facet_grid(Path_full ~ model_lab) +
+  ggh4x::facetted_pos_scales(y = y_scales_spill) +
+  ggh4x::force_panelsizes(rows = unit(panel_h_spill, "in")) +
+  scale_x_continuous(breaks = 2021:2023) +
+  scale_color_manual(values = all_spill_colors, guide = "none") +
+  scale_fill_manual(values = all_spill_fill, guide = "none") +
+  labs(
+    title    = "Spillover models: path coefficients by model (2021–2023)",
+    subtitle = paste0("Bootstrap n = ", N_BOOT,
+                      "  |  filled = p < .05, white = n.s.  |  Unified Y-axis scale across all panels"),
+    x = "Year", y = "Standardized Coefficient"
+  ) +
+  theme_classic(base_size = 13) +
+  theme(
+    axis.text.x      = element_text(angle = 90, size = 11),
+    strip.text.x     = element_text(size = 12),
+    strip.text.y     = element_text(size = 11, angle = 0, hjust = 0),
+    strip.background = element_rect(fill = "gray85", color = "gray50"),
+    panel.border     = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
+  )
+
+spill_total_h <- sum(panel_h_spill, na.rm = TRUE)
+ggsave(file.path(out_dir, "spillover_layer23_paths.pdf"), p_spill_paths,
+       width = 3.5 * n_cols + 1, height = spill_total_h)
+cat("Saved: spillover_layer23_paths.pdf\n")
 
 ## R² 提升图
 p_r2_lift <- r2_comparison %>%
@@ -968,27 +1068,6 @@ p_r2_lift <- r2_comparison %>%
 
 ggsave(file.path(out_dir, "spillover_r2_lift.pdf"), p_r2_lift, width = 7, height = 4)
 
-## 中介效应图
-if (nrow(mediation_results) > 0) {
-  p_mediation <- mediation_results %>%
-    mutate(path_wrap = str_wrap(path, 30), year_num = as.numeric(year)) %>%
-    ggplot(aes(x = year_num, y = beta, color = path_wrap, group = path_wrap)) +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
-    geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = path_wrap),
-                alpha = 0.15, color = NA) +
-    geom_line(linewidth = 0.9) +
-    geom_point(size = 3) +
-    scale_x_continuous(breaks = 2021:2023) +
-    scale_color_manual(values = c("#4DBBD5", "#E64B35")) +
-    scale_fill_manual(values  = c("#4DBBD5", "#E64B35")) +
-    labs(title = "Mediation: indirect effects of GreenBehav via ATT",
-         x = "Year", y = "Indirect effect (bootstrapped)",
-         color = NULL, fill = NULL) +
-    theme_classic(base_size = 9) +
-    theme(legend.position = "bottom")
-
-  ggsave(file.path(out_dir, "spillover_mediation_plot.pdf"), p_mediation, width = 7, height = 4)
-}
 
 cat("Saved: spillover plots\n")
 
@@ -1018,4 +1097,3 @@ cat("  spillover_r2_comparison.csv\n")
 cat("  spillover_layer1_correlations.pdf\n")
 cat("  spillover_layer23_paths.pdf\n")
 cat("  spillover_r2_lift.pdf\n")
-cat("  spillover_mediation_plot.pdf\n")
