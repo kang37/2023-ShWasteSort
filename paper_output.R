@@ -955,30 +955,49 @@ spill_model_labels <- c(
 )
 
 spill_path_labels <- c(
-  "DESC_NORM->ATT"             = "Desc. Norm -> Attitude",
-  "DESC_NORM->PBC"             = "Desc. Norm -> PBC",
-  "PBC->ATT"                   = "PBC -> Attitude",
-  "DESC_NORM->wil_of_engage"   = "Desc. Norm -> Intention",
-  "PBC->wil_of_engage"         = "PBC -> Intention",
-  "ATT->wil_of_engage"         = "Attitude -> Intention",
-  "wil_of_engage->seper_recyc" = "Intention -> Behavior",
-  "PBC->seper_recyc"           = "PBC -> Behavior (direct)",
-  "GreenBehav->wil_of_engage"  = "GreenBehav -> Intention",
-  "GreenBehav->seper_recyc"    = "GreenBehav -> Behavior"
+  "DESC_NORM->ATT"             = "Subjective norm\n->\nAttitude",
+  "DESC_NORM->PBC"             = "Subjective norm\n->\nPBC",
+  "PBC->ATT"                   = "PBC\n->\nAttitude",
+  "DESC_NORM->wil_of_engage"   = "Subjective norm\n->\nIntention",
+  "PBC->wil_of_engage"         = "PBC\n->\nIntention",
+  "ATT->wil_of_engage"         = "Attitude\n->\nIntention",
+  "wil_of_engage->seper_recyc" = "Intention\n->\nBehavior",
+  "PBC->seper_recyc"           = "PBC\n->\nBehavior",
+  "GreenBehav->wil_of_engage"  = "Green behavior\n->\nIntention",
+  "GreenBehav->seper_recyc"    = "Green behavior\n->\nBehavior"
 )
 
 # 路径行顺序
 spill_path_order <- c(
-  "Desc. Norm -> Attitude", "Desc. Norm -> PBC", "PBC -> Attitude",
-  "Desc. Norm -> Intention", "PBC -> Intention", "Attitude -> Intention",
-  "Intention -> Behavior", "PBC -> Behavior (direct)",
-  "GreenBehav -> Intention", "GreenBehav -> Behavior"
+  "Subjective norm\n->\nAttitude",
+  "Subjective norm\n->\nPBC",
+  "PBC\n->\nAttitude",
+  "Subjective norm\n->\nIntention",
+  "PBC\n->\nIntention",
+  "Attitude\n->\nIntention",
+  "Intention\n->\nBehavior",
+  "PBC\n->\nBehavior",
+  "Green behavior\n->\nIntention",
+  "Green behavior\n->\nBehavior"
 )
 
 all_spill_colors <- c(
   path_colors,
-  "GreenBehav -> Intention" = "#4DBBD5",
-  "GreenBehav -> Behavior"  = "#E64B35"
+  "Green behavior\n->\nIntention" = "#4DBBD5",
+  "Green behavior\n->\nBehavior"  = "#E64B35"
+)
+
+all_spill_colors <- c(
+  "Subjective norm\n->\nAttitude"    = "#2166AC",
+  "Subjective norm\n->\nPBC"         = "#4393C3",
+  "PBC\n->\nAttitude"                = "#92C5DE",
+  "Subjective norm\n->\nIntention"   = "#1B7837",
+  "PBC\n->\nIntention"               = "#5AAE61",
+  "Attitude\n->\nIntention"          = "#A6D96A",
+  "Intention\n->\nBehavior"          = "#D73027",
+  "PBC\n->\nBehavior"                = "#F46D43",
+  "Green behavior\n->\nIntention"    = "#4DBBD5",
+  "Green behavior\n->\nBehavior"     = "#E64B35"
 )
 all_spill_fill <- c(all_spill_colors, ns = "white")
 
@@ -1024,8 +1043,8 @@ p_spill_paths <- ggplot(spill_plot_data,
   geom_point(aes(fill = point_fill), shape = 21, size = 3.5, stroke = 1) +
   geom_text(aes(label = sig), vjust = -1.0, size = 3, show.legend = FALSE) +
   facet_grid(Path_full ~ model_lab) +
-  ggh4x::facetted_pos_scales(y = y_scales_spill) +
-  ggh4x::force_panelsizes(rows = unit(panel_h_spill, "in")) +
+  # ggh4x::facetted_pos_scales(y = y_scales_spill) +
+  # ggh4x::force_panelsizes(rows = unit(panel_h_spill, "in")) +
   scale_x_continuous(breaks = 2021:2023) +
   scale_color_manual(values = all_spill_colors, guide = "none") +
   scale_fill_manual(values = all_spill_fill, guide = "none") +
@@ -1045,9 +1064,12 @@ p_spill_paths <- ggplot(spill_plot_data,
   )
 
 spill_total_h <- sum(panel_h_spill, na.rm = TRUE)
-ggsave(file.path(out_dir, "spillover_layer23_paths.pdf"), p_spill_paths,
-       width = 3.5 * n_cols + 1, height = spill_total_h)
-cat("Saved: spillover_layer23_paths.pdf\n")
+png(
+  file.path(out_dir, "spillover_layer23_paths.png"), 
+  width = 2000, height = 4000, res = 300
+)
+p_spill_paths
+dev.off()
 
 ## R² 提升图
 p_r2_lift <- r2_comparison %>%
