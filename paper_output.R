@@ -603,25 +603,25 @@ write.csv(mga_results, file.path(out_dir, "pls_mga_all_pairs.csv"), row.names = 
 # 各面板纵轴范围独立，但1单位所对应的物理高度一致（ggh4x::force_panelsizes）
 # ============================================================================
 path_labels <- c(
-  "DESC_NORM->wil_of_engage"   = "Desc. Norm -> Intention",
+  "DESC_NORM->wil_of_engage"   = "Subjective norm -> Intention",
   "PBC->wil_of_engage"         = "PBC -> Intention",
   "ATT->wil_of_engage"         = "Attitude -> Intention",
   "wil_of_engage->seper_recyc" = "Intention -> Behavior",
-  "PBC->seper_recyc"           = "PBC -> Behavior (direct)",
-  "DESC_NORM->ATT"             = "Desc. Norm -> Attitude",
-  "DESC_NORM->PBC"             = "Desc. Norm -> PBC",
+  "PBC->seper_recyc"           = "PBC -> Behavior",
+  "DESC_NORM->ATT"             = "Subjective norm -> Attitude",
+  "DESC_NORM->PBC"             = "Subjective norm -> PBC",
   "PBC->ATT"                   = "PBC -> Attitude"
 )
 
 path_colors <- c(
-  "Desc. Norm -> Intention"    = "#1B7837",  # 深绿
-  "PBC -> Intention"           = "#5AAE61",  # 中绿
-  "Attitude -> Intention"      = "#A6D96A",  # 浅绿
-  "Intention -> Behavior"      = "#D73027",  # 红
-  "PBC -> Behavior (direct)"   = "#F46D43",  # 橙
-  "Desc. Norm -> Attitude"     = "#2166AC",  # 深蓝
-  "Desc. Norm -> PBC"          = "#4393C3",  # 中蓝
-  "PBC -> Attitude"            = "#92C5DE"   # 浅蓝
+  "Subjective norm -> Intention" = "#1B7837",  # 深绿
+  "PBC -> Intention"             = "#5AAE61",  # 中绿
+  "Attitude -> Intention"        = "#A6D96A",  # 浅绿
+  "Intention -> Behavior"        = "#D73027",  # 红
+  "PBC -> Behavior"              = "#F46D43",  # 橙
+  "Subjective norm -> Attitude"  = "#2166AC",  # 深蓝
+  "Subjective norm -> PBC"       = "#4393C3",  # 中蓝
+  "PBC -> Attitude"              = "#92C5DE"   # 浅蓝
 )
 
 plot_data <- path_results %>%
@@ -669,22 +669,31 @@ y_scales <- lapply(seq_along(path_order), function(i) {
 fill_values <- c(setNames(unname(path_colors), names(path_colors)), ns = "white")
 
 # 路径分组（三列）
-col_blue  <- c("Desc. Norm -> Attitude", "Desc. Norm -> PBC", "PBC -> Attitude")
-col_green <- c("Desc. Norm -> Intention", "PBC -> Intention", "Attitude -> Intention")
-col_red   <- c("Intention -> Behavior", "PBC -> Behavior (direct)")
+col_blue  <- c("Subjective norm -> Attitude", "Subjective norm -> PBC", "PBC -> Attitude")
+col_green <- c("Subjective norm -> Intention", "PBC -> Intention", "Attitude -> Intention")
+col_red   <- c("Intention -> Behavior", "PBC -> Behavior")
 
-make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, x_breaks) {
+make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, x_breaks,
+                          global_ylim = NULL) {
   d <- data %>% filter(Path_full %in% paths_in_col) %>%
     mutate(Path_full = factor(Path_full, levels = paths_in_col))
   r <- ranges %>% filter(Path_full %in% paths_in_col) %>%
     slice(match(paths_in_col, Path_full))
-  ph <- r$span * HEIGHT_UNIT
-  ys <- lapply(seq_along(paths_in_col), function(i) {
-    ri  <- r[i, ]
-    brk <- pretty(c(ri$ylo, ri$yhi), n = if (ri$span > 0.6) 5 else 4)
-    brk <- brk[brk >= ri$ylo & brk <= ri$yhi]
-    scale_y_continuous(limits = c(ri$ylo, ri$yhi), breaks = brk)
-  })
+  n_panels <- length(paths_in_col)
+  if (!is.null(global_ylim)) {
+    brk  <- pretty(global_ylim, n = 5)
+    brk  <- brk[brk >= global_ylim[1] & brk <= global_ylim[2]]
+    ys   <- rep(list(scale_y_continuous(limits = global_ylim, breaks = brk)), n_panels)
+    ph   <- rep(diff(global_ylim) * HEIGHT_UNIT, n_panels)
+  } else {
+    ph <- r$span * HEIGHT_UNIT
+    ys <- lapply(seq_along(paths_in_col), function(i) {
+      ri  <- r[i, ]
+      brk <- pretty(c(ri$ylo, ri$yhi), n = if (ri$span > 0.6) 5 else 4)
+      brk <- brk[brk >= ri$ylo & brk <= ri$yhi]
+      scale_y_continuous(limits = c(ri$ylo, ri$yhi), breaks = brk)
+    })
+  }
   p <- ggplot(d, aes(x = year_num, y = beta, color = Path_full)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = 0.4) +
     geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = Path_full),
@@ -708,9 +717,15 @@ make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, 
   list(plot = p, height = sum(ph))
 }
 
-col1 <- make_path_col(col_blue,  plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023)
-col2 <- make_path_col(col_green, plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023)
-col3 <- make_path_col(col_red,   plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023)
+# 全局统一Y轴范围（所有路径CI）
+global_ylo_path <- min(plot_data$ci_low,  na.rm = TRUE)
+global_yhi_path <- max(plot_data$ci_high, na.rm = TRUE)
+global_pad_path <- (global_yhi_path - global_ylo_path) * 0.08
+global_ylim_path <- c(global_ylo_path - global_pad_path, global_yhi_path + global_pad_path)
+
+col1 <- make_path_col(col_blue,  plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
+col2 <- make_path_col(col_green, plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
+col3 <- make_path_col(col_red,   plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
 
 p_paths <- col1$plot + col2$plot + col3$plot +
   patchwork::plot_layout(ncol = 3) +
@@ -767,8 +782,7 @@ p_heatmap <- ggplot(heatmap_data, aes(x = year_b, y = year_a, fill = sig_level))
   theme_bw(base_size = 10)
 
 ggsave(file.path(out_dir, "pls_mga_heatmap.pdf"), p_heatmap, width = 14, height = 14)
-ggsave(file.path(out_dir, "pls_mga_heatmap.png"), p_heatmap, width = 14, height = 14, dpi = 180)
-cat("Saved: pls_mga_heatmap.pdf / .png\n")
+cat("Saved: pls_mga_heatmap.pdf\n")
 
 # ============================================================================
 # 13. 溢出分析（以新替代模型为基准）
@@ -973,6 +987,27 @@ r2_comparison <- lapply(spill_years, function(y) {
             extract_r2(full_results,   "M_spill_full"))
 }) %>% bind_rows()
 
+## SRMR 提取（各模型各年份）
+extract_srmr <- function(res_list, model_tag) {
+  lapply(spill_years, function(y) {
+    srmr_val <- tryCatch({
+      sm <- summary(res_list[[y]]$fit)
+      as.numeric(sm$model_criteria["SRMR", 1])
+    }, error = function(e) NA_real_)
+    data.frame(year = as.integer(y), model = model_tag, SRMR = srmr_val)
+  }) %>% bind_rows()
+}
+srmr_comparison <- bind_rows(
+  extract_srmr(base_results,   "M_base"),
+  extract_srmr(bi_results,     "M_spill_bi"),
+  extract_srmr(direct_results, "M_spill_direct"),
+  extract_srmr(full_results,   "M_spill_full")
+) %>%
+  mutate(model = factor(model,
+    levels = c("M_base", "M_spill_bi", "M_spill_direct", "M_spill_full"),
+    labels = c("Base model", "Spillover to intention", "Spillover to behavior", "Spillover full")))
+write.csv(srmr_comparison, file.path(out_dir, "spillover_srmr_comparison.csv"), row.names = FALSE)
+
 ## 汇总溢出路径
 all_spill_paths <- bind_rows(base_paths, bi_paths, direct_paths, full_paths)
 key_paths <- all_spill_paths %>%
@@ -984,7 +1019,6 @@ key_paths <- all_spill_paths %>%
 write.csv(layer1_cor,        file.path(out_dir, "spillover_correlation_table.csv"),  row.names = FALSE)
 write.csv(all_spill_paths,   file.path(out_dir, "spillover_all_paths.csv"),          row.names = FALSE)
 write.csv(key_paths,         file.path(out_dir, "spillover_key_paths.csv"),          row.names = FALSE)
-write.csv(mediation_results, file.path(out_dir, "spillover_mediation.csv"),          row.names = FALSE)
 write.csv(r2_comparison,     file.path(out_dir, "spillover_r2_comparison.csv"),      row.names = FALSE)
 cat("Saved: spillover CSVs\n")
 
@@ -1010,13 +1044,13 @@ p_layer1 <- layer1_cor %>%
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
   facet_wrap(~ var_to) +
   scale_fill_manual(values = c("#4DBBD5", "#00A087", "#E64B35")) +
-  labs(title = "Layer 1: Correlations between green behaviours and waste sorting",
+  labs(title = "Correlations between green behaviours and waste sorting",
        x = "Year", y = "Kendall's tau", fill = "Green behaviour") +
   theme_classic(base_size = 9) +
   theme(legend.position = "bottom",
         strip.background = element_rect(fill = "gray90"))
 
-ggsave(file.path(out_dir, "spillover_layer1_correlations.pdf"), p_layer1, width = 8, height = 4)
+ggsave(file.path(out_dir, "spillover_correlations.pdf"), p_layer1, width = 8, height = 4)
 
 ## Layer 2/3 溢出路径图：3列（模型）× N行（路径），空面板留白
 spill_model_colors <- c(
@@ -1171,6 +1205,26 @@ p_r2_lift <- r2_comparison %>%
 
 ggsave(file.path(out_dir, "spillover_r2_lift.pdf"), p_r2_lift, width = 7, height = 4)
 
+## SRMR 对比图
+p_srmr <- srmr_comparison %>%
+  filter(!is.na(SRMR)) %>%
+  ggplot(aes(x = year, y = SRMR, color = model, group = model)) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 3) +
+  geom_text(aes(label = round(SRMR, 3)), vjust = -0.8, size = 3, show.legend = FALSE) +
+  geom_hline(yintercept = 0.08, linetype = "dashed", color = "gray40", linewidth = 0.5) +
+  annotate("text", x = min(as.integer(spill_years)) + 0.05, y = 0.08,
+           label = "Threshold = 0.08", vjust = -0.5, hjust = 0, size = 3, color = "gray40") +
+  scale_color_manual(values = c("gray50", "#4DBBD5", "#E64B35", "#3C5488")) +
+  labs(title = "SRMR across spillover models by year",
+       subtitle = "Lower is better; < 0.08 indicates acceptable model fit",
+       x = "Year", y = "SRMR", color = "Model") +
+  theme_classic(base_size = 9) +
+  theme(legend.position = "bottom")
+
+ggsave(file.path(out_dir, "spillover_srmr_comparison.pdf"), p_srmr, width = 7, height = 4)
+cat("Saved: spillover_srmr_comparison.pdf\n")
+
 
 cat("Saved: spillover plots\n")
 
@@ -1195,8 +1249,9 @@ cat("  pls_mga_heatmap.pdf / .png\n")
 cat("  spillover_correlation_table.csv\n")
 cat("  spillover_all_paths.csv\n")
 cat("  spillover_key_paths.csv\n")
-cat("  spillover_mediation.csv\n")
 cat("  spillover_r2_comparison.csv\n")
-cat("  spillover_layer1_correlations.pdf\n")
-cat("  spillover_layer23_paths.pdf\n")
+cat("  spillover_srmr_comparison.csv\n")
+cat("  spillover_correlations.pdf\n")
+cat("  spillover_layer23_paths.png\n")
 cat("  spillover_r2_lift.pdf\n")
+cat("  spillover_srmr_comparison.pdf\n")
