@@ -138,13 +138,31 @@ gene_des_avg <- gene_des_proc %>%
             label = scales::percent(percentage, accuracy = 2),
             .groups = "drop")
 
+age_grp_proc <- ws_full %>%
+  filter(!is.na(age_grp)) %>%
+  count(year, age_grp, name = "count") %>%
+  group_by(year) %>%
+  mutate(percentage = count / sum(count)) %>%
+  ungroup() %>%
+  rename(category = age_grp) %>%
+  mutate(variable = "age_grp", category = as.character(category))
+
+age_grp_avg <- age_grp_proc %>%
+  group_by(variable, category) %>%
+  summarise(percentage = mean(percentage), .groups = "drop")
+
 demographics_table <- bind_rows(
-  gene_des_proc, gene_des_avg %>% mutate(year = "Average")
+  gene_des_proc %>% mutate(category = as.character(category)),
+  gene_des_avg  %>% mutate(year = "Average", category = as.character(category)),
+  age_grp_proc,
+  age_grp_avg %>% mutate(year = "Average")
 ) %>%
   select(variable, category, year, percentage) %>%
   pivot_wider(names_from = year, values_from = percentage) %>%
   mutate(across(where(is.numeric), ~ scales::percent(.x, accuracy = 0.01))) %>%
-  mutate(category = factor(category, levels = order_levels)) %>%
+  mutate(category = factor(category, levels = c(
+    order_levels, "<=25", "25~40", "40_60", ">60"
+  ))) %>%
   arrange(variable, category)
 
 write.csv(demographics_table, file.path(out_dir, "demographics_table.csv"), row.names = FALSE)
@@ -269,14 +287,21 @@ calculate_group_stats <- function(data, group_var, dep_var) {
     mutate(group_variable = group_var, dependent_variable = dep_var)
 }
 
-grouping_vars    <- c("gender", "age_grp", "education_grp")
+grouping_vars    <- c("gender", "age_grp", "education_grp", "occupation", "income")
 target_vars_diff <- c("wil_of_engage", "seper_recyc")
+
+# occupation/income 需要转为 factor（ws_full 中为数值，用 ws_full_text 的文字版）
+ws_full_grp <- ws_full %>%
+  mutate(
+    occupation = ws_full_text$occupation,
+    income     = ws_full_text$income
+  )
 
 all_comp <- list(); all_stats <- list(); counter <- 1
 for (gv in grouping_vars) {
   for (dv in target_vars_diff) {
-    all_comp[[counter]]  <- perform_group_comparison(ws_full, gv, dv)
-    all_stats[[counter]] <- calculate_group_stats(ws_full, gv, dv)
+    all_comp[[counter]]  <- perform_group_comparison(ws_full_grp, gv, dv)
+    all_stats[[counter]] <- calculate_group_stats(ws_full_grp, gv, dv)
     counter <- counter + 1
   }
 }
@@ -284,62 +309,113 @@ for (gv in grouping_vars) {
 comparison_df <- bind_rows(all_comp)
 stats_df      <- bind_rows(all_stats)
 
-group_diff_table <- left_join(
-  stats_df,
-  comparison_df %>% select(year, group_variable, dependent_variable,
-                            p_value, p_significance, test_type),
-  by = c("year", "group_variable", "dependent_variable")
-) %>%
+# 仅含均值统计的宽表（删去原组间对比列）
+group_means_table <- stats_df %>%
   arrange(group_variable, dependent_variable, year, group_level)
+write.csv(group_means_table,
+          file.path(out_dir, "group_means_by_year.csv"), row.names = FALSE)
 
-write.csv(group_diff_table, file.path(out_dir, "group_differences_table.csv"), row.names = FALSE)
+# 显著性检验结果单独保存
+group_test_table <- comparison_df %>%
+  arrange(group_variable, dependent_variable, year)
+write.csv(group_test_table,
+          file.path(out_dir, "group_difference_tests.csv"), row.names = FALSE)
+
+cat("Saved: group_means_by_year.csv + group_difference_tests.csv\n")
+
+# 标签映射
+group_var_labels <- c(
+  "gender"        = "Gender",
+  "age_grp"       = "Age Group",
+  "education_grp" = "Education",
+  "occupation"    = "Occupation",
+  "income"        = "Income"
+)
+dep_var_labels <- c(
+  "wil_of_engage" = "Intention",
+  "seper_recyc"   = "Behavior"
+)
+group_level_labels <- c(
+  "1" = "Male", "2" = "Female",
+  "male" = "Male", "female" = "Female",
+  "<=25" = "≤25", "25~40" = "25–40", "40_60" = "40–60", ">60" = ">60",
+  "under_senior" = "≤High school", "undergrad" = "Undergraduate",
+  "beyond_master" = "≥Graduate",
+  "government" = "Gov't", "institution" = "Institution",
+  "state_enterprise" = "State enterprise", "foreign_enterprise" = "Foreign enterprise",
+  "private_enterprise" = "Private enterprise", "self_employed" = "Self-employed",
+  "freelancer" = "Freelancer", "retired" = "Retired",
+  "student" = "Student", "occ_other" = "Other",
+  "≤ 3" = "≤3k", "3~5" = "3–5k", "5~10" = "5–10k",
+  "10~15" = "10–15k", "15~20" = "15–20k", "20~30" = "20–30k", "> 30" = ">30k"
+)
 
 mean_plot_data <- stats_df %>%
   mutate(
-    group_var_label = case_when(
-      group_variable == "gender"        ~ "Gender",
-      group_variable == "age_grp"       ~ "Age Group",
-      group_variable == "education_grp" ~ "Education Level",
-      TRUE ~ group_variable
-    ),
-    dep_var_label = case_when(
-      dependent_variable == "wil_of_engage" ~ "Intention",
-      dependent_variable == "seper_recyc"   ~ "Behavior",
-      TRUE ~ dependent_variable
-    ),
-    group_level_label = case_when(
-      group_level == "1"            ~ "Male",
-      group_level == "2"            ~ "Female",
-      group_level == "<=25"         ~ "<=25",
-      group_level == "25~40"        ~ "25~40",
-      group_level == "40_60"        ~ "40~60",
-      group_level == ">60"          ~ ">60",
-      group_level == "under_senior" ~ "High School or Below",
-      group_level == "undergrad"    ~ "Undergraduate",
-      group_level == "beyond_master"~ "Graduate or Above",
-      TRUE ~ as.character(group_level)
-    )
+    group_var_label   = group_var_labels[group_variable],
+    dep_var_label     = dep_var_labels[dependent_variable],
+    group_level_label = coalesce(group_level_labels[as.character(group_level)],
+                                 as.character(group_level))
   )
 
 sig_data <- comparison_df %>%
   mutate(
-    group_var_label = case_when(
-      group_variable == "gender"        ~ "Gender",
-      group_variable == "age_grp"       ~ "Age Group",
-      group_variable == "education_grp" ~ "Education Level",
-      TRUE ~ group_variable
-    ),
-    dep_var_label = case_when(
-      dependent_variable == "wil_of_engage" ~ "Intention",
-      dependent_variable == "seper_recyc"   ~ "Behavior",
-      TRUE ~ dependent_variable
-    ),
-    significant = p_value < 0.05
+    group_var_label = group_var_labels[group_variable],
+    dep_var_label   = dep_var_labels[dependent_variable],
+    significant     = p_value < 0.05,
+    sig_label       = case_when(
+      p_value < .001 ~ "***", p_value < .01 ~ "**",
+      p_value < .05  ~ "*",   TRUE ~ ""
+    )
   )
 
-write.csv(mean_plot_data, file.path(out_dir, "mean_intension_behavior_of_group.csv"), row.names = FALSE)
-write.csv(sig_data,       file.path(out_dir, "mean_intension_behavior_of_group_statistic.csv"), row.names = FALSE)
-cat("Saved: group_differences_table.csv + group mean files\n")
+# 图：各组均值 × 年份，显著性以边框/背景标注
+plot_group_data <- mean_plot_data %>%
+  left_join(
+    sig_data %>% select(year, group_variable, dependent_variable, significant, sig_label),
+    by = c("year", "group_variable", "dependent_variable")
+  ) %>%
+  mutate(
+    year_num = as.numeric(as.character(year)),
+    group_var_label = factor(group_var_label,
+                             levels = group_var_labels[grouping_vars])
+  )
+
+p_group_means <- ggplot(plot_group_data,
+                         aes(x = year_num, y = mean_val,
+                             color = group_level_label, group = group_level_label)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2.5) +
+  geom_rect(
+    data = sig_data %>%
+      mutate(group_var_label = factor(group_var_labels[group_variable],
+                                      levels = group_var_labels[grouping_vars]),
+             dep_var_label   = dep_var_labels[dependent_variable],
+             year_num        = as.numeric(as.character(year))) %>%
+      filter(significant),
+    aes(xmin = year_num - 0.4, xmax = year_num + 0.4,
+        ymin = -Inf, ymax = Inf),
+    inherit.aes = FALSE,
+    fill = "gold", alpha = 0.25
+  ) +
+  facet_grid(dep_var_label ~ group_var_label, scales = "free_y") +
+  scale_x_continuous(breaks = 2019:2023) +
+  labs(
+    x = "Year", y = "Mean score", color = NULL,
+    caption = "Highlighted years: significant group difference (p < .05, Wilcoxon / Kruskal-Wallis)"
+  ) +
+  theme_bw(base_size = 10) +
+  theme(
+    legend.position  = "bottom",
+    axis.text.x      = element_text(angle = 90, size = 8),
+    strip.background = element_rect(fill = "gray90"),
+    strip.text       = element_text(size = 9),
+    panel.grid.minor = element_blank()
+  )
+
+ggsave(file.path(out_dir, "group_means_by_year.pdf"),
+       p_group_means, width = 14, height = 6)
+cat("Saved: group_means_by_year.pdf\n")
 
 # ============================================================================
 # 4. 新替代模型：变量与PLS定义
