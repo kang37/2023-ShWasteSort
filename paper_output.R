@@ -603,25 +603,25 @@ write.csv(mga_results, file.path(out_dir, "pls_mga_all_pairs.csv"), row.names = 
 # 各面板纵轴范围独立，但1单位所对应的物理高度一致（ggh4x::force_panelsizes）
 # ============================================================================
 path_labels <- c(
-  "DESC_NORM->wil_of_engage"   = "Subjective norm -> Intention",
-  "PBC->wil_of_engage"         = "PBC -> Intention",
-  "ATT->wil_of_engage"         = "Attitude -> Intention",
-  "wil_of_engage->seper_recyc" = "Intention -> Behavior",
-  "PBC->seper_recyc"           = "PBC -> Behavior",
-  "DESC_NORM->ATT"             = "Subjective norm -> Attitude",
-  "DESC_NORM->PBC"             = "Subjective norm -> PBC",
-  "PBC->ATT"                   = "PBC -> Attitude"
+  "DESC_NORM->wil_of_engage"   = "Subjective norm → Intention",
+  "PBC->wil_of_engage"         = "PBC → Intention",
+  "ATT->wil_of_engage"         = "Attitude → Intention",
+  "wil_of_engage->seper_recyc" = "Intention → Behavior",
+  "PBC->seper_recyc"           = "PBC → Behavior",
+  "DESC_NORM->ATT"             = "Subjective norm → Attitude",
+  "DESC_NORM->PBC"             = "Subjective norm → PBC",
+  "PBC->ATT"                   = "PBC → Attitude"
 )
 
 path_colors <- c(
-  "Subjective norm -> Intention" = "#1B7837",  # 深绿
-  "PBC -> Intention"             = "#5AAE61",  # 中绿
-  "Attitude -> Intention"        = "#A6D96A",  # 浅绿
-  "Intention -> Behavior"        = "#D73027",  # 红
-  "PBC -> Behavior"              = "#F46D43",  # 橙
-  "Subjective norm -> Attitude"  = "#2166AC",  # 深蓝
-  "Subjective norm -> PBC"       = "#4393C3",  # 中蓝
-  "PBC -> Attitude"              = "#92C5DE"   # 浅蓝
+  "Subjective norm → Intention" = "#1B7837",  # 深绿
+  "PBC → Intention"             = "#5AAE61",  # 中绿
+  "Attitude → Intention"        = "#A6D96A",  # 浅绿
+  "Intention → Behavior"        = "#D73027",  # 红
+  "PBC → Behavior"              = "#F46D43",  # 橙
+  "Subjective norm → Attitude"  = "#2166AC",  # 深蓝
+  "Subjective norm → PBC"       = "#4393C3",  # 中蓝
+  "PBC → Attitude"              = "#92C5DE"   # 浅蓝
 )
 
 plot_data <- path_results %>%
@@ -669,9 +669,9 @@ y_scales <- lapply(seq_along(path_order), function(i) {
 fill_values <- c(setNames(unname(path_colors), names(path_colors)), ns = "white")
 
 # 路径分组（三列）
-col_blue  <- c("Subjective norm -> Attitude", "Subjective norm -> PBC", "PBC -> Attitude")
-col_green <- c("Subjective norm -> Intention", "PBC -> Intention", "Attitude -> Intention")
-col_red   <- c("Intention -> Behavior", "PBC -> Behavior")
+col_blue  <- c("Subjective norm → Attitude", "Subjective norm → PBC", "PBC → Attitude")
+col_green <- c("Subjective norm → Intention", "PBC → Intention", "Attitude → Intention")
+col_red   <- c("Intention → Behavior", "PBC → Behavior")
 
 make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, x_breaks,
                           global_ylim = NULL) {
@@ -727,18 +727,13 @@ col1 <- make_path_col(col_blue,  plot_data, ranges_ord, HEIGHT_UNIT, fill_values
 col2 <- make_path_col(col_green, plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
 col3 <- make_path_col(col_red,   plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
 
-p_paths <- col1$plot + col2$plot + col3$plot +
-  patchwork::plot_layout(ncol = 3) +
-  patchwork::plot_annotation(
-    title    = "Alt Model: DESC_NORM / PBC / ATT fully connected + direct to BEH",
-    subtitle = paste0("Bootstrap n = ", N_BOOT,
-                      "  |  filled = p < .05, white = n.s.  |  Consistent y-axis scale")
-  )
-
-total_height <- max(col1$height, col2$height, col3$height) + 2.5
-ggsave(file.path(out_dir, "pls_model_path_plot.pdf"), plot = p_paths,
-       width = 12, height = total_height)
-cat("Saved: pls_model_path_plot.pdf\n")
+ggsave(file.path(out_dir, "pls_model_path_plot_col1.pdf"), plot = col1$plot,
+       width = 4, height = col1$height + 1.5)
+ggsave(file.path(out_dir, "pls_model_path_plot_col2.pdf"), plot = col2$plot,
+       width = 4, height = col2$height + 1.5)
+ggsave(file.path(out_dir, "pls_model_path_plot_col3.pdf"), plot = col3$plot,
+       width = 4, height = col3$height + 1.5)
+cat("Saved: pls_model_path_plot_col1/2/3.pdf\n")
 
 # ============================================================================
 # 12. 图：MGA 热力图
@@ -947,7 +942,7 @@ mediation_results <- lapply(spill_years, function(y) {
       through = "wil_of_engage", to = "seper_recyc", alpha = 0.05),
     error = function(e) NULL
   )
-  parse_ie(ie, y, "GreenBehav -> BI -> BEH (indirect)")
+  parse_ie(ie, y, "GreenBehav → BI → BEH (indirect)")
 }) %>% bind_rows() %>% mutate(sig = sig_star(p_value))
 
 cat("\nIndirect effects:\n")
@@ -987,16 +982,52 @@ r2_comparison <- lapply(spill_years, function(y) {
             extract_r2(full_results,   "M_spill_full"))
 }) %>% bind_rows()
 
-## SRMR 提取（各模型各年份）
+## 手动计算 PLS SRMR（Henseler et al. 2014）
+# 原理：比较实际指标相关矩阵 S 与模型隐含相关矩阵 Σ̂
+# Σ̂ = Λ %*% R_C %*% t(Λ)，其中 Λ 为载荷矩阵，R_C 为构念相关矩阵
+# 复合型构念（type="A"）内部指标用实际相关取代隐含相关
+# SRMR = sqrt(2/(p*(p+1)) * sum_lower((S_ij - Σ̂_ij)^2))
+compute_pls_srmr <- function(pls_model) {
+  # 实际指标相关矩阵
+  S      <- cor(pls_model$data, use = "pairwise.complete.obs")
+  p      <- nrow(S)
+  # 构念相关矩阵（由构念得分估计）
+  R_C    <- cor(pls_model$construct_scores, use = "pairwise.complete.obs")
+  # 载荷矩阵（指标 × 构念）
+  Lambda <- pls_model$outer_loadings
+  # 保证指标顺序与 S 一致
+  ind_names <- rownames(S)
+  Lambda    <- Lambda[ind_names, , drop = FALSE]
+  # 模型隐含相关矩阵
+  Sigma_hat        <- Lambda %*% R_C %*% t(Lambda)
+  diag(Sigma_hat)  <- 1
+  # 复合型构念：内部指标用实际相关替代（模型不限制其内部结构）
+  mm <- pls_model$mmMatrix
+  for (cname in unique(mm[, "construct"])) {
+    rows <- mm[mm[, "construct"] == cname, , drop = FALSE]
+    if (any(rows[, "type"] == "A") && nrow(rows) > 1) {
+      inds <- intersect(rows[, "measurement"], ind_names)
+      Sigma_hat[inds, inds] <- S[inds, inds]
+    }
+  }
+  # SRMR（下三角含对角线）
+  res  <- S - Sigma_hat
+  srmr <- sqrt(2 * sum(res[lower.tri(res, diag = TRUE)]^2) / (p * (p + 1)))
+  return(round(srmr, 4))
+}
+
 extract_srmr <- function(res_list, model_tag) {
   lapply(spill_years, function(y) {
-    srmr_val <- tryCatch({
-      sm <- summary(res_list[[y]]$fit)
-      as.numeric(sm$model_criteria["SRMR", 1])
-    }, error = function(e) NA_real_)
+    srmr_val <- tryCatch(
+      compute_pls_srmr(res_list[[y]]$fit),
+      error = function(e) {
+        cat("SRMR error [", model_tag, y, "]:", conditionMessage(e), "\n")
+        NA_real_
+      })
     data.frame(year = as.integer(y), model = model_tag, SRMR = srmr_val)
   }) %>% bind_rows()
 }
+
 srmr_comparison <- bind_rows(
   extract_srmr(base_results,   "M_base"),
   extract_srmr(bi_results,     "M_spill_bi"),
@@ -1065,49 +1096,49 @@ spill_model_labels <- c(
 )
 
 spill_path_labels <- c(
-  "DESC_NORM->ATT"             = "Subjective norm\n->\nAttitude",
-  "DESC_NORM->PBC"             = "Subjective norm\n->\nPBC",
-  "PBC->ATT"                   = "PBC\n->\nAttitude",
-  "DESC_NORM->wil_of_engage"   = "Subjective norm\n->\nIntention",
-  "PBC->wil_of_engage"         = "PBC\n->\nIntention",
-  "ATT->wil_of_engage"         = "Attitude\n->\nIntention",
-  "wil_of_engage->seper_recyc" = "Intention\n->\nBehavior",
-  "PBC->seper_recyc"           = "PBC\n->\nBehavior",
-  "GreenBehav->wil_of_engage"  = "Green behavior\n->\nIntention",
-  "GreenBehav->seper_recyc"    = "Green behavior\n->\nBehavior"
+  "DESC_NORM->ATT"             = "Subjective norm\n→\nAttitude",
+  "DESC_NORM->PBC"             = "Subjective norm\n→\nPBC",
+  "PBC->ATT"                   = "PBC\n→\nAttitude",
+  "DESC_NORM->wil_of_engage"   = "Subjective norm\n→\nIntention",
+  "PBC->wil_of_engage"         = "PBC\n→\nIntention",
+  "ATT->wil_of_engage"         = "Attitude\n→\nIntention",
+  "wil_of_engage->seper_recyc" = "Intention\n→\nBehavior",
+  "PBC->seper_recyc"           = "PBC\n→\nBehavior",
+  "GreenBehav->wil_of_engage"  = "Green behavior\n→\nIntention",
+  "GreenBehav->seper_recyc"    = "Green behavior\n→\nBehavior"
 )
 
 # 路径行顺序
 spill_path_order <- c(
-  "Subjective norm\n->\nAttitude",
-  "Subjective norm\n->\nPBC",
-  "PBC\n->\nAttitude",
-  "Subjective norm\n->\nIntention",
-  "PBC\n->\nIntention",
-  "Attitude\n->\nIntention",
-  "Intention\n->\nBehavior",
-  "PBC\n->\nBehavior",
-  "Green behavior\n->\nIntention",
-  "Green behavior\n->\nBehavior"
+  "Subjective norm\n→\nAttitude",
+  "Subjective norm\n→\nPBC",
+  "PBC\n→\nAttitude",
+  "Subjective norm\n→\nIntention",
+  "PBC\n→\nIntention",
+  "Attitude\n→\nIntention",
+  "Intention\n→\nBehavior",
+  "PBC\n→\nBehavior",
+  "Green behavior\n→\nIntention",
+  "Green behavior\n→\nBehavior"
 )
 
 all_spill_colors <- c(
   path_colors,
-  "Green behavior\n->\nIntention" = "#4DBBD5",
-  "Green behavior\n->\nBehavior"  = "#E64B35"
+  "Green behavior\n→\nIntention" = "#4DBBD5",
+  "Green behavior\n→\nBehavior"  = "#E64B35"
 )
 
 all_spill_colors <- c(
-  "Subjective norm\n->\nAttitude"    = "#2166AC",
-  "Subjective norm\n->\nPBC"         = "#4393C3",
-  "PBC\n->\nAttitude"                = "#92C5DE",
-  "Subjective norm\n->\nIntention"   = "#1B7837",
-  "PBC\n->\nIntention"               = "#5AAE61",
-  "Attitude\n->\nIntention"          = "#A6D96A",
-  "Intention\n->\nBehavior"          = "#D73027",
-  "PBC\n->\nBehavior"                = "#F46D43",
-  "Green behavior\n->\nIntention"    = "#4DBBD5",
-  "Green behavior\n->\nBehavior"     = "#E64B35"
+  "Subjective norm\n→\nAttitude"    = "#2166AC",
+  "Subjective norm\n→\nPBC"         = "#4393C3",
+  "PBC\n→\nAttitude"                = "#92C5DE",
+  "Subjective norm\n→\nIntention"   = "#1B7837",
+  "PBC\n→\nIntention"               = "#5AAE61",
+  "Attitude\n→\nIntention"          = "#A6D96A",
+  "Intention\n→\nBehavior"          = "#D73027",
+  "PBC\n→\nBehavior"                = "#F46D43",
+  "Green behavior\n→\nIntention"    = "#4DBBD5",
+  "Green behavior\n→\nBehavior"     = "#E64B35"
 )
 all_spill_fill <- c(all_spill_colors, ns = "white")
 
@@ -1191,8 +1222,8 @@ p_r2_lift <- r2_comparison %>%
   filter(Construct == "seper_recyc") %>%
   mutate(model = factor(model,
     levels = c("M_base", "M_spill_bi", "M_spill_direct", "M_spill_full"),
-    labels = c("M_base\n(TPB only)", "M_spill_bi\n(+GB->BI)",
-               "M_spill_direct\n(+GB->BEH)", "M_spill_full\n(+both)"))) %>%
+    labels = c("M_base\n(TPB only)", "M_spill_bi\n(+GB→BI)",
+               "M_spill_direct\n(+GB→BEH)", "M_spill_full\n(+both)"))) %>%
   ggplot(aes(x = year, y = R2, fill = model)) +
   geom_col(position = "dodge", width = 0.7) +
   geom_text(aes(label = round(R2, 3)), position = position_dodge(0.7),
