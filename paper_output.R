@@ -1002,7 +1002,12 @@ all_spill_colors <- c(
 all_spill_fill <- c(all_spill_colors, ns = "white")
 
 # 整理所有模型路径数据（含M_base）
-spill_model_all_labels <- c("M_base" = "Base Model", spill_model_labels)
+spill_model_all_labels <- c(
+  "M_base"        = "Base model",
+  "M_spill_bi"    = "Spillover to intention",
+  "M_spill_direct"= "Spillover to behavior",
+  "M_spill_full"  = "Spillover full"
+)
 
 spill_plot_data <- all_spill_paths %>%
   filter(model %in% names(spill_model_all_labels)) %>%
