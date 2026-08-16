@@ -180,18 +180,18 @@ dist_vars <- c(
 )
 
 var_labels <- c(
-  "ws_attitude"      = "ATT: ws_attitude",
-  "ws_interest"      = "ATT: ws_interest",
-  "threat"           = "ATT: threat",
-  "if_neighbor_ws"   = "DESC_NORM: if_neighbor_ws",
-  "if_family_ws"     = "DESC_NORM: if_family_ws",
-  "category_trouble" = "PBC: category_trouble",
-  "time_cost_troub"  = "PBC: time_cost_troub",
-  "wil_of_engage"    = "BI: wil_of_engage",
-  "seper_recyc"      = "BEH: seper_recyc",
-  "reuse_bag"        = "GreenBehav: reuse_bag",
-  "energy_concern"   = "GreenBehav: energy_concern",
-  "save_energy"      = "GreenBehav: save_energy"
+  "ws_attitude"      = "Attitude: Support sorting",
+  "ws_interest"      = "Attitude: Sorting interest",
+  "threat"           = "Attitude: Waste issue",
+  "if_neighbor_ws"   = "Subjective norm: Neighbor",
+  "if_family_ws"     = "Subjective norm: Family",
+  "category_trouble" = "PBC: Sorting complexity",
+  "time_cost_troub"  = "PBC: Time burden",
+  "wil_of_engage"    = "Behavioral intention: Intention",
+  "seper_recyc"      = "Target behavior: Waste sorting behavior",
+  "reuse_bag"        = "HPB: Reuse bag",
+  "energy_concern"   = "HPB: Energy conservation products",
+  "save_energy"      = "HPB: Save energy"
 )
 
 dist_data <- ws_full %>%
@@ -225,10 +225,10 @@ p_dist <- ggplot(dist_data, aes(x = year, y = prop, fill = value)) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), expand = c(0, 0)) +
   facet_wrap(~ var_label, ncol = 3) +
   labs(x = "Year", y = "Proportion") +
-  theme_bw(base_size = 11) +
+  theme_bw(base_size = 14) +
   theme(
-    strip.text       = element_text(size = 8),
-    axis.text.x      = element_text(size = 8),
+    strip.text       = element_text(size = 12),
+    axis.text.x      = element_text(size = 11),
     legend.position  = "bottom",
     panel.grid.major.x = element_blank()
   )
