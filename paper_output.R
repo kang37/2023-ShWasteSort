@@ -523,7 +523,22 @@ htmt_results <- lapply(year_levels, function(y) {
 print("CR and AVE:"); print(as.data.frame(validity_results))
 print("HTMT:");       print(as.data.frame(htmt_results))
 
-write.csv(htmt_results, file.path(out_dir, "pls_htmt_results.csv"), row.names = FALSE)
+construct_name_map <- c(
+  "DESC_NORM"     = "Subjective norm",
+  "PBC"           = "PBC",
+  "ATT"           = "Attitude",
+  "wil_of_engage" = "Behavioral intention",
+  "seper_recyc"   = "Target behavior"
+)
+htmt_results_out <- htmt_results %>%
+  select(year, Construct, everything()) %>%
+  mutate(
+    Construct = construct_name_map[Construct],
+    across(where(is.numeric), ~ ifelse(is.na(.x), NA_real_, round(.x, 2)))
+  ) %>%
+  rename_with(~ construct_name_map[.x], .cols = intersect(names(.), names(construct_name_map)))
+write.csv(htmt_results_out, file.path(out_dir, "pls_htmt_results.csv"),
+          row.names = FALSE, na = "")
 
 validity_wide <- validity_results %>%
   pivot_longer(cols = c(CR, AVE), names_to = "Metric", values_to = "value") %>%
