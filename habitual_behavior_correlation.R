@@ -138,3 +138,190 @@ ggsave(
 
 print(cor_results %>% select(-cell_label))
 cat("Outputs saved to:", out_dir, "\n")
+
+# -----------------------------------------------------------------------------
+# Simultaneous ordinal-logit models and within-year coefficient comparisons
+# -----------------------------------------------------------------------------
+# Predictors are standardized within year, so each coefficient is the change in
+# cumulative log odds of reporting a higher waste-sorting category per 1-SD
+# increase in that habitual behavior. All three behaviors enter simultaneously.
+
+habit_labels <- c(
+  reuse_bag      = "Reusable bag use",
+  energy_concern = "Energy-efficiency concern",
+  save_energy    = "Water and energy saving"
+)
+
+fit_habit_model <- function(data, year_value) {
+  model_data <- data %>%
+    filter(year == year_value) %>%
+    select(all_of(c(habit_vars, "seper_recyc"))) %>%
+    mutate(across(everything(), as.numeric)) %>%
+    tidyr::drop_na() %>%
+    mutate(
+      across(all_of(habit_vars), ~ as.numeric(scale(.x))),
+      seper_recyc = ordered(seper_recyc)
+    )
+
+  fit <- MASS::polr(
+    seper_recyc ~ reuse_bag + energy_concern + save_energy,
+    data = model_data,
+    method = "logistic",
+    Hess = TRUE
+  )
+
+  beta <- coef(fit)
+  covariance <- vcov(fit)[names(beta), names(beta), drop = FALSE]
+  standard_error <- sqrt(diag(covariance))
+  z_value <- beta / standard_error
+
+  coefficient_table <- tibble(
+    year = year_value,
+    habitual_behavior = names(beta),
+    beta = unname(beta),
+    se = unname(standard_error),
+    ci_low = beta - qnorm(.975) * standard_error,
+    ci_high = beta + qnorm(.975) * standard_error,
+    odds_ratio = exp(beta),
+    or_ci_low = exp(ci_low),
+    or_ci_high = exp(ci_high),
+    p_value = 2 * pnorm(-abs(z_value)),
+    n = nrow(model_data),
+    aic = AIC(fit)
+  )
+
+  behavior_pairs <- combn(names(beta), 2, simplify = FALSE)
+  difference_table <- map_dfr(behavior_pairs, function(pair) {
+    difference <- beta[pair[1]] - beta[pair[2]]
+    difference_se <- sqrt(
+      covariance[pair[1], pair[1]] + covariance[pair[2], pair[2]] -
+        2 * covariance[pair[1], pair[2]]
+    )
+    z_difference <- difference / difference_se
+
+    tibble(
+      year = year_value,
+      behavior_1 = pair[1],
+      behavior_2 = pair[2],
+      beta_difference = unname(difference),
+      se_difference = unname(difference_se),
+      ci_low = unname(difference - qnorm(.975) * difference_se),
+      ci_high = unname(difference + qnorm(.975) * difference_se),
+      z_value = unname(z_difference),
+      p_value = 2 * pnorm(-abs(z_difference))
+    )
+  }) %>%
+    mutate(
+      p_holm = p.adjust(p_value, method = "holm"),
+      significant_holm = p_holm < .05
+    )
+
+  list(fit = fit, coefficients = coefficient_table, differences = difference_table)
+}
+
+habit_models <- map(as.character(years), ~ fit_habit_model(ws_habit, .x))
+names(habit_models) <- as.character(years)
+
+model_coefficients <- map_dfr(habit_models, "coefficients") %>%
+  mutate(
+    habitual_behavior = recode(habitual_behavior, !!!habit_labels),
+    habitual_behavior = factor(
+      habitual_behavior,
+      levels = unname(habit_labels)
+    ),
+    significance = case_when(
+      p_value < .001 ~ "***",
+      p_value < .01  ~ "**",
+      p_value < .05  ~ "*",
+      TRUE ~ ""
+    )
+  )
+
+coefficient_differences <- map_dfr(habit_models, "differences") %>%
+  mutate(
+    behavior_1 = recode(behavior_1, !!!habit_labels),
+    behavior_2 = recode(behavior_2, !!!habit_labels),
+    comparison = paste(behavior_1, "minus", behavior_2),
+    significance_holm = case_when(
+      p_holm < .001 ~ "***",
+      p_holm < .01  ~ "**",
+      p_holm < .05  ~ "*",
+      TRUE ~ ""
+    )
+  )
+
+coefficient_plot <- ggplot(
+  model_coefficients,
+  aes(x = beta, y = habitual_behavior, color = factor(year))
+) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_errorbar(
+    aes(xmin = ci_low, xmax = ci_high),
+    position = position_dodge(width = .55), width = .18, linewidth = .7,
+    orientation = "y"
+  ) +
+  geom_point(position = position_dodge(width = .55), size = 2.8) +
+  scale_color_manual(values = c("#4DBBD5", "#00A087", "#E64B35")) +
+  labs(
+    title = "Independent associations with waste-sorting behavior",
+    subtitle = "Ordinal logit; all three standardized behaviors entered simultaneously",
+    x = "Coefficient (log odds per 1-SD increase)", y = NULL, color = "Year"
+  ) +
+  theme_classic(base_size = 11) +
+  theme(plot.title = element_text(face = "bold"), legend.position = "bottom")
+
+difference_heatmap <- coefficient_differences %>%
+  mutate(
+    comparison = factor(comparison, levels = unique(comparison)),
+    year = factor(year, levels = as.character(years)),
+    cell_label = sprintf(
+      "diff = %+.3f%s\nHolm p = %.3f",
+      beta_difference, significance_holm, p_holm
+    )
+  ) %>%
+  ggplot(aes(x = year, y = comparison, fill = beta_difference)) +
+  geom_tile(color = "white", linewidth = 1) +
+  geom_text(aes(label = cell_label), size = 3.1, lineheight = 1.05) +
+  scale_fill_gradient2(
+    low = "#2166AC", mid = "white", high = "#B2182B",
+    midpoint = 0, name = "Coefficient\ndifference"
+  ) +
+  labs(
+    title = "Pairwise differences between habitual-behavior coefficients",
+    subtitle = "Positive values favor the first behavior; Holm-adjusted within each year",
+    x = "Year", y = NULL
+  ) +
+  theme_classic(base_size = 10) +
+  theme(axis.ticks.y = element_blank(), plot.title = element_text(face = "bold"))
+
+write.csv(
+  model_coefficients,
+  file.path(out_dir, "habitual_behavior_ordinal_model_coefficients.csv"),
+  row.names = FALSE
+)
+write.csv(
+  coefficient_differences,
+  file.path(out_dir, "habitual_behavior_coefficient_differences.csv"),
+  row.names = FALSE
+)
+ggsave(
+  file.path(out_dir, "habitual_behavior_ordinal_model_forest.pdf"),
+  coefficient_plot, width = 7.2, height = 4.2
+)
+ggsave(
+  file.path(out_dir, "habitual_behavior_ordinal_model_forest.png"),
+  coefficient_plot, width = 7.2, height = 4.2, dpi = 300
+)
+ggsave(
+  file.path(out_dir, "habitual_behavior_coefficient_difference_heatmap.pdf"),
+  difference_heatmap, width = 8.5, height = 4.5
+)
+ggsave(
+  file.path(out_dir, "habitual_behavior_coefficient_difference_heatmap.png"),
+  difference_heatmap, width = 8.5, height = 4.5, dpi = 300
+)
+
+cat("\nSimultaneous ordinal-logit coefficients:\n")
+print(model_coefficients)
+cat("\nWithin-year coefficient comparisons (Holm-adjusted):\n")
+print(coefficient_differences)
