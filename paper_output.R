@@ -1098,6 +1098,73 @@ p_layer1 <- layer1_cor %>%
 
 ggsave(file.path(out_dir, "spillover_correlations.pdf"), p_layer1, width = 8, height = 4)
 
+## 三种习惯性环保行为与垃圾分类行为的逐年相关热力图
+# 只展示与实际垃圾分类行为（BEH）的 Kendall 相关；单元格同时标注
+# tau、显著性和有效样本量，便于比较行为类型及其年度稳定性。
+habit_cor_heatmap_data <- layer1_cor %>%
+  filter(var_to == "seper_recyc", !is.na(tau)) %>%
+  mutate(
+    habitual_behavior = recode(
+      var_from,
+      reuse_bag      = "Reusable bag use",
+      energy_concern = "Energy-efficiency concern",
+      save_energy    = "Water and energy saving"
+    ),
+    habitual_behavior = factor(
+      habitual_behavior,
+      levels = c(
+        "Reusable bag use",
+        "Energy-efficiency concern",
+        "Water and energy saving"
+      )
+    ),
+    year = factor(year, levels = spill_years),
+    cell_label = sprintf("tau = %.3f%s\nn = %d", tau, sig, n)
+  )
+
+p_habit_cor_heatmap <- ggplot(
+  habit_cor_heatmap_data,
+  aes(x = year, y = habitual_behavior, fill = tau)
+) +
+  geom_tile(color = "white", linewidth = 1) +
+  geom_text(aes(label = cell_label), size = 3.5, lineheight = 1.05) +
+  scale_fill_gradient2(
+    low = "#2166AC", mid = "white", high = "#B2182B",
+    midpoint = 0, limits = c(-0.30, 0.30),
+    name = "Kendall's tau"
+  ) +
+  labs(
+    title = "Habitual green behaviors vs. waste sorting",
+    subtitle = "Kendall correlations by survey year; * p < .05, ** p < .01, *** p < .001",
+    x = "Year", y = NULL
+  ) +
+  coord_fixed(ratio = 0.8) +
+  theme_classic(base_size = 11) +
+  theme(
+    axis.ticks.y = element_blank(),
+    legend.position = "right",
+    plot.title = element_text(face = "bold")
+  )
+
+write.csv(
+  habit_cor_heatmap_data %>%
+    transmute(
+      year, habitual_behavior, kendall_tau = tau,
+      p_value, n, significance = sig
+    ),
+  file.path(out_dir, "habitual_behavior_waste_sorting_correlations.csv"),
+  row.names = FALSE
+)
+ggsave(
+  file.path(out_dir, "habitual_behavior_waste_sorting_heatmap.pdf"),
+  p_habit_cor_heatmap, width = 7.2, height = 3.8
+)
+ggsave(
+  file.path(out_dir, "habitual_behavior_waste_sorting_heatmap.png"),
+  p_habit_cor_heatmap, width = 7.2, height = 3.8, dpi = 300
+)
+cat("Saved: habitual behavior correlation table and heatmap (.csv/.pdf/.png)\n")
+
 ## Layer 2/3 溢出路径图：3列（模型）× N行（路径），空面板留白
 spill_model_colors <- c(
   "M_spill_bi"     = "#4DBBD5",
@@ -1298,6 +1365,8 @@ cat("  spillover_key_paths.csv\n")
 cat("  spillover_r2_comparison.csv\n")
 cat("  spillover_srmr_comparison.csv\n")
 cat("  spillover_correlations.pdf\n")
+cat("  habitual_behavior_waste_sorting_correlations.csv\n")
+cat("  habitual_behavior_waste_sorting_heatmap.pdf / .png\n")
 cat("  spillover_layer23_paths.png\n")
 cat("  spillover_r2_lift.pdf\n")
 cat("  spillover_srmr_comparison.pdf\n")
