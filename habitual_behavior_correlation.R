@@ -143,9 +143,9 @@ cat("Outputs saved to:", out_dir, "\n")
 # -----------------------------------------------------------------------------
 # Simultaneous ordinal-logit models and within-year coefficient comparisons
 # -----------------------------------------------------------------------------
-# Predictors are standardized within year, so each coefficient is the change in
-# cumulative log odds of reporting a higher waste-sorting category per 1-SD
-# increase in that habitual behavior. All three behaviors enter simultaneously.
+# Predictors retain their original 1-5 scales, so each coefficient is the
+# change in cumulative log odds of reporting a higher waste-sorting category
+# per one-point increase. All three behaviors enter simultaneously.
 
 habit_labels <- c(
   reuse_bag      = "Reusable bag use",
@@ -160,7 +160,6 @@ fit_habit_model <- function(data, year_value) {
     mutate(across(everything(), as.numeric)) %>%
     tidyr::drop_na() %>%
     mutate(
-      across(all_of(habit_vars), ~ as.numeric(scale(.x))),
       seper_recyc = ordered(seper_recyc)
     )
 
@@ -265,8 +264,8 @@ coefficient_plot <- ggplot(
   scale_color_manual(values = c("#4DBBD5", "#00A087", "#E64B35")) +
   labs(
     title = "Independent associations with waste-sorting behavior",
-    subtitle = "Ordinal logit; all three standardized behaviors entered simultaneously",
-    x = "Coefficient (log odds per 1-SD increase)", y = NULL, color = "Year"
+    subtitle = "Ordinal logit; all three behaviors entered simultaneously",
+    x = "Coefficient (log odds per one-point increase)", y = NULL, color = "Year"
   ) +
   theme_classic(base_size = 11) +
   theme(plot.title = element_text(face = "bold"), legend.position = "bottom")
@@ -332,9 +331,9 @@ print(coefficient_differences)
 # control (PBC)
 # -----------------------------------------------------------------------------
 # PBC is the mean of the same two items, with the same coding, used in the main
-# PLS-SEM analysis. BI, PBC, and the three habitual behaviors are standardized
-# within year. Pairwise tests concern only the three habitual-behavior
-# coefficients.
+# PLS-SEM analysis. BI, PBC, and the three habitual behaviors retain their
+# original 1-5 scales, so coefficients represent a one-point increase.
+# Pairwise tests concern only the three habitual-behavior coefficients.
 
 fit_adjusted_habit_model <- function(data, year_value) {
   model_data <- data %>%
@@ -344,8 +343,6 @@ fit_adjusted_habit_model <- function(data, year_value) {
     tidyr::drop_na() %>%
     mutate(
       PBC = rowMeans(cbind(category_trouble, time_cost_troub)),
-      across(all_of(c(habit_vars, "wil_of_engage", "PBC")),
-             ~ as.numeric(scale(.x))),
       seper_recyc = ordered(seper_recyc)
     )
 
@@ -447,28 +444,40 @@ adjusted_forest_data <- adjusted_coefficients %>%
   filter(predictor_type == "Habitual behavior") %>%
   mutate(
     predictor_label = factor(predictor_label, levels = unname(habit_labels))
+  ) %>%
+  mutate(
+    year = factor(year, levels = as.character(years)),
+    plot_y = as.numeric(predictor_label) +
+      c("2021" = .18, "2022" = 0, "2023" = -.18)[as.character(year)]
   )
 
 adjusted_coefficient_plot <- ggplot(
   adjusted_forest_data,
-  aes(x = beta, y = predictor_label, color = factor(year))
+  aes(x = beta, y = plot_y, color = year, linetype = year)
 ) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
-  geom_errorbar(
-    aes(xmin = ci_low, xmax = ci_high),
-    position = position_dodge(width = .55), width = .18, linewidth = .7,
-    orientation = "y"
+  geom_segment(aes(x = ci_low, xend = ci_high, yend = plot_y),
+               linewidth = .8) +
+  geom_point(size = 2.8) +
+  scale_color_manual(
+    values = c("2021" = "#7570B3", "2022" = "#E7298A", "2023" = "#A6761D"),
+    breaks = as.character(years)
   ) +
-  geom_point(position = position_dodge(width = .55), size = 2.8) +
-  scale_color_manual(values = c("#4DBBD5", "#00A087", "#E64B35")) +
+  scale_linetype_manual(
+    values = c("2021" = "solid", "2022" = "dashed", "2023" = "dotted"),
+    breaks = as.character(years)
+  ) +
+  scale_y_continuous(breaks = seq_along(habit_labels),
+                     labels = unname(habit_labels)) +
   labs(
     title = "Habitual green behaviors adjusted for BI and PBC",
-    subtitle = "Ordinal logit; standardized coefficients with 95% confidence intervals",
-    x = "Adjusted coefficient (log odds per 1-SD increase)",
-    y = NULL, color = "Year"
+    subtitle = "Ordinal logit; unstandardized coefficients with 95% confidence intervals",
+    x = "Adjusted coefficient (log odds per one-point increase)",
+    y = NULL, color = "Year", linetype = "Year"
   ) +
   theme_classic(base_size = 11) +
-  theme(plot.title = element_text(face = "bold"), legend.position = "bottom")
+  theme(plot.title = element_text(face = "bold"), legend.position = "right",
+        legend.key.width = grid::unit(1.2, "cm"))
 
 adjusted_difference_heatmap <- adjusted_differences %>%
   mutate(
