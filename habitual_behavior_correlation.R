@@ -453,7 +453,7 @@ adjusted_forest_data <- adjusted_coefficients %>%
 
 adjusted_coefficient_plot <- ggplot(
   adjusted_forest_data,
-  aes(x = beta, y = plot_y, color = year, linetype = year)
+  aes(x = beta, y = plot_y, color = year, shape = year)
 ) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
   geom_segment(aes(x = ci_low, xend = ci_high, yend = plot_y),
@@ -463,8 +463,8 @@ adjusted_coefficient_plot <- ggplot(
     values = c("2021" = "#7570B3", "2022" = "#E7298A", "2023" = "#A6761D"),
     breaks = as.character(years)
   ) +
-  scale_linetype_manual(
-    values = c("2021" = "solid", "2022" = "dashed", "2023" = "dotted"),
+  scale_shape_manual(
+    values = c("2021" = 16, "2022" = 17, "2023" = 15),
     breaks = as.character(years)
   ) +
   scale_y_continuous(breaks = seq_along(habit_labels),
@@ -473,7 +473,7 @@ adjusted_coefficient_plot <- ggplot(
     title = "Habitual green behaviors adjusted for BI and PBC",
     subtitle = "Ordinal logit; unstandardized coefficients with 95% confidence intervals",
     x = "Adjusted coefficient (log odds per one-point increase)",
-    y = NULL, color = "Year", linetype = "Year"
+    y = NULL, color = "Year", shape = "Year"
   ) +
   theme_classic(base_size = 11) +
   theme(plot.title = element_text(face = "bold"), legend.position = "right",

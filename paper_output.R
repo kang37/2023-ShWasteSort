@@ -1068,6 +1068,9 @@ write.csv(key_paths,         file.path(out_dir, "spillover_key_paths.csv"),     
 write.csv(r2_comparison,     file.path(out_dir, "spillover_r2_comparison.csv"),      row.names = FALSE)
 cat("Saved: spillover CSVs\n")
 
+# 两行（基础模型、入选的行为溢出模型）× 多列（结构路径）的年度趋势图。
+source("selected_spillover_models_plot.R")
+
 # ============================================================================
 # 14. 溢出图形
 # ============================================================================
@@ -1370,3 +1373,5 @@ cat("  habitual_behavior_waste_sorting_heatmap.pdf / .png\n")
 cat("  spillover_layer23_paths.png\n")
 cat("  spillover_r2_lift.pdf\n")
 cat("  spillover_srmr_comparison.pdf\n")
+cat("  selected_spillover_models_paths.csv\n")
+cat("  selected_spillover_models_path_trends.pdf / .png\n")
