@@ -455,10 +455,11 @@ adjusted_coefficient_plot <- ggplot(
   adjusted_forest_data,
   aes(x = beta, y = plot_y, color = year, shape = year)
 ) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray50",
+             linewidth = .75) +
   geom_segment(aes(x = ci_low, xend = ci_high, yend = plot_y),
-               linewidth = .8) +
-  geom_point(size = 2.8) +
+               linewidth = 1.2) +
+  geom_point(size = 4.2) +
   scale_color_manual(
     values = c("2021" = "#7570B3", "2022" = "#E7298A", "2023" = "#A6761D"),
     breaks = as.character(years)
@@ -469,13 +470,14 @@ adjusted_coefficient_plot <- ggplot(
   ) +
   scale_y_continuous(breaks = seq_along(habit_labels),
                      labels = unname(habit_labels)) +
+  scale_x_continuous(breaks = c(-.1, .1, .3, .5)) +
   labs(
     title = NULL,
     subtitle = NULL,
     x = "Adjusted coefficient",
     y = NULL, color = "Year", shape = "Year"
   ) +
-  theme_classic(base_size = 44) +
+  theme_classic(base_size = 66) +
   theme(legend.position = "right",
         legend.key.width = grid::unit(1.2, "cm"))
 
@@ -515,11 +517,11 @@ write.csv(
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_forest.pdf"),
-  adjusted_coefficient_plot, width = 18, height = 12
+  adjusted_coefficient_plot, width = 27, height = 12
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_forest.png"),
-  adjusted_coefficient_plot, width = 18, height = 12, dpi = 300
+  adjusted_coefficient_plot, width = 27, height = 12, dpi = 300
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_difference_heatmap.pdf"),

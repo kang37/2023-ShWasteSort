@@ -16,32 +16,32 @@ if (!exists("out_dir")) {
 }
 
 selected_model_labels <- c(
-  "M_base" = "Base model",
-  "M_spill_direct" = "Behavior-spillover model"
+  "M_base" = "Base\nmodel",
+  "M_spill_direct" = "Behavior-\nspillover"
 )
 
 selected_path_labels <- c(
-  "DESC_NORM->ATT"             = "Subjective norm\n→ Attitude",
-  "DESC_NORM->PBC"             = "Subjective norm\n→ PBC",
+  "DESC_NORM->ATT"             = "Subjective\nnorm\n→ Attitude",
+  "DESC_NORM->PBC"             = "Subjective\nnorm\n→ PBC",
   "PBC->ATT"                   = "PBC\n→ Attitude",
-  "DESC_NORM->wil_of_engage"   = "Subjective norm\n→ Intention",
+  "DESC_NORM->wil_of_engage"   = "Subjective\nnorm\n→ Intention",
   "PBC->wil_of_engage"         = "PBC\n→ Intention",
   "ATT->wil_of_engage"         = "Attitude\n→ Intention",
   "wil_of_engage->seper_recyc" = "Intention\n→ Behavior",
   "PBC->seper_recyc"           = "PBC\n→ Behavior",
-  "GreenBehav->seper_recyc"    = "Green behavior\n→ Behavior"
+  "GreenBehav->seper_recyc"    = "Green\nbehavior\n→ Behavior"
 )
 
 selected_path_colors <- c(
-  "Subjective norm\n→ Attitude"  = "#2166AC",
-  "Subjective norm\n→ PBC"       = "#4393C3",
+  "Subjective\nnorm\n→ Attitude"  = "#2166AC",
+  "Subjective\nnorm\n→ PBC"       = "#4393C3",
   "PBC\n→ Attitude"              = "#92C5DE",
-  "Subjective norm\n→ Intention" = "#1B7837",
+  "Subjective\nnorm\n→ Intention" = "#1B7837",
   "PBC\n→ Intention"             = "#5AAE61",
   "Attitude\n→ Intention"        = "#A6D96A",
   "Intention\n→ Behavior"        = "#D73027",
   "PBC\n→ Behavior"              = "#F46D43",
-  "Green behavior\n→ Behavior"   = "#762A83"
+  "Green\nbehavior\n→ Behavior"   = "#762A83"
 )
 
 selected_path_order <- names(selected_path_colors)
@@ -85,11 +85,11 @@ selected_models_path_plot <- ggplot(
     subtitle = "Bootstrap estimates and 95% confidence intervals; purple denotes the spillover path",
     x = "Year", y = "Standardized path coefficient"
   ) +
-  theme_classic(base_size = 18) +
+  theme_classic(base_size = 36) +
   theme(
     axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1),
-    strip.text.x = element_text(size = 16),
-    strip.text.y = element_text(size = 18, face = "bold"),
+    strip.text.x = element_text(size = 32),
+    strip.text.y = element_text(size = 36, face = "bold", angle = 0),
     strip.background = element_rect(fill = "gray92", color = "gray60"),
     panel.border = element_rect(color = "gray70", fill = NA, linewidth = .7),
     legend.position = "bottom",
