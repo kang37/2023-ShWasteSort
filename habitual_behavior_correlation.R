@@ -470,13 +470,13 @@ adjusted_coefficient_plot <- ggplot(
   scale_y_continuous(breaks = seq_along(habit_labels),
                      labels = unname(habit_labels)) +
   labs(
-    title = "Habitual green behaviors adjusted for BI and PBC",
-    subtitle = "Ordinal logit; unstandardized coefficients with 95% confidence intervals",
-    x = "Adjusted coefficient (log odds per one-point increase)",
+    title = NULL,
+    subtitle = NULL,
+    x = "Adjusted coefficient",
     y = NULL, color = "Year", shape = "Year"
   ) +
-  theme_classic(base_size = 11) +
-  theme(plot.title = element_text(face = "bold"), legend.position = "right",
+  theme_classic(base_size = 22) +
+  theme(legend.position = "right",
         legend.key.width = grid::unit(1.2, "cm"))
 
 adjusted_difference_heatmap <- adjusted_differences %>%
@@ -515,11 +515,11 @@ write.csv(
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_forest.pdf"),
-  adjusted_coefficient_plot, width = 7.2, height = 4.2
+  adjusted_coefficient_plot, width = 11, height = 7.5
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_forest.png"),
-  adjusted_coefficient_plot, width = 7.2, height = 4.2, dpi = 300
+  adjusted_coefficient_plot, width = 11, height = 7.5, dpi = 300
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_difference_heatmap.pdf"),
