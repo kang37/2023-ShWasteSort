@@ -64,19 +64,19 @@ selected_models_path_plot <- ggplot(
   selected_models_plot_data,
   aes(x = year_num, y = beta, color = Path, group = interaction(Model, Path))
 ) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "gray55", linewidth = .35) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray55", linewidth = .7) +
   geom_ribbon(
     aes(ymin = ci_low, ymax = ci_high, fill = Path),
     alpha = .12, color = NA
   ) +
-  geom_line(linewidth = .8) +
-  geom_point(aes(shape = significant), size = 2.4, stroke = .8) +
+  geom_line(linewidth = 1.6) +
+  geom_point(aes(shape = significant), size = 4.8, stroke = 1.6, fill = "white") +
   facet_grid(Model ~ Path, drop = FALSE) +
   scale_x_continuous(breaks = 2021:2023) +
   scale_color_manual(values = selected_path_colors, guide = "none") +
   scale_fill_manual(values = selected_path_colors, guide = "none") +
   scale_shape_manual(
-    values = c(`TRUE` = 16, `FALSE` = 1),
+    values = c(`TRUE` = 16, `FALSE` = 21),
     labels = c(`TRUE` = "p < .05", `FALSE` = "Not significant"),
     name = NULL
   ) +
@@ -85,13 +85,13 @@ selected_models_path_plot <- ggplot(
     subtitle = "Bootstrap estimates and 95% confidence intervals; purple denotes the spillover path",
     x = "Year", y = "Standardized path coefficient"
   ) +
-  theme_classic(base_size = 9) +
+  theme_classic(base_size = 18) +
   theme(
     axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1),
-    strip.text.x = element_text(size = 8),
-    strip.text.y = element_text(size = 9, face = "bold"),
+    strip.text.x = element_text(size = 16),
+    strip.text.y = element_text(size = 18, face = "bold"),
     strip.background = element_rect(fill = "gray92", color = "gray60"),
-    panel.border = element_rect(color = "gray70", fill = NA, linewidth = .35),
+    panel.border = element_rect(color = "gray70", fill = NA, linewidth = .7),
     legend.position = "bottom",
     panel.spacing = grid::unit(.12, "lines")
   )
@@ -104,11 +104,11 @@ write.csv(
 )
 ggsave(
   file.path(out_dir, "selected_spillover_models_path_trends.pdf"),
-  selected_models_path_plot, width = 18, height = 5.8
+  selected_models_path_plot, width = 28, height = 10
 )
 ggsave(
   file.path(out_dir, "selected_spillover_models_path_trends.png"),
-  selected_models_path_plot, width = 18, height = 5.8, dpi = 300
+  selected_models_path_plot, width = 28, height = 10, dpi = 300
 )
 
 cat("Saved: selected_spillover_models_path_trends.pdf / .png\n")

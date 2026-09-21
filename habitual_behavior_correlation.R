@@ -475,7 +475,7 @@ adjusted_coefficient_plot <- ggplot(
     x = "Adjusted coefficient",
     y = NULL, color = "Year", shape = "Year"
   ) +
-  theme_classic(base_size = 22) +
+  theme_classic(base_size = 44) +
   theme(legend.position = "right",
         legend.key.width = grid::unit(1.2, "cm"))
 
@@ -515,11 +515,11 @@ write.csv(
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_forest.pdf"),
-  adjusted_coefficient_plot, width = 11, height = 7.5
+  adjusted_coefficient_plot, width = 18, height = 12
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_forest.png"),
-  adjusted_coefficient_plot, width = 11, height = 7.5, dpi = 300
+  adjusted_coefficient_plot, width = 18, height = 12, dpi = 300
 )
 ggsave(
   file.path(out_dir, "habitual_behavior_adjusted_bi_pbc_difference_heatmap.pdf"),
