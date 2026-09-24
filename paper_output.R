@@ -689,7 +689,7 @@ col_green <- c("Subjective norm → Intention", "PBC → Intention", "Attitude �
 col_red   <- c("Intention → Behavior", "PBC → Behavior")
 
 make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, x_breaks,
-                          global_ylim = NULL) {
+                          global_ylim = NULL, show_y_title = TRUE) {
   d <- data %>% filter(Path_full %in% paths_in_col) %>%
     mutate(Path_full = factor(Path_full, levels = paths_in_col))
   r <- ranges %>% filter(Path_full %in% paths_in_col) %>%
@@ -715,15 +715,14 @@ make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, 
                 alpha = 0.12, color = NA) +
     geom_line(linewidth = 0.9) +
     geom_point(aes(fill = point_fill), shape = 21, size = 3.5, stroke = 1) +
-    geom_text(aes(label = sig), vjust = -1.0, size = 3, show.legend = FALSE) +
     facet_wrap(~ Path_full, ncol = 1, scales = "free_y") +
     ggh4x::facetted_pos_scales(y = ys) +
     ggh4x::force_panelsizes(rows = unit(ph, "in")) +
     scale_x_continuous(breaks = x_breaks) +
     scale_color_manual(values = path_colors, guide = "none") +
     scale_fill_manual(values = fill_values, guide = "none") +
-    labs(x = "Year", y = "Standardized Coefficient") +
-    theme_classic(base_size = 9) +
+    labs(x = "Year", y = if (show_y_title) "Standardized Coefficient" else NULL) +
+    theme_classic(base_size = 18) +
     theme(
       axis.text.x      = element_text(angle = 90),
       strip.background = element_rect(fill = "gray85", color = "gray50"),
@@ -739,15 +738,17 @@ global_pad_path <- (global_yhi_path - global_ylo_path) * 0.08
 global_ylim_path <- c(global_ylo_path - global_pad_path, global_yhi_path + global_pad_path)
 
 col1 <- make_path_col(col_blue,  plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
-col2 <- make_path_col(col_green, plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
-col3 <- make_path_col(col_red,   plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023, global_ylim_path)
+col2 <- make_path_col(col_green, plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023,
+                      global_ylim_path, show_y_title = FALSE)
+col3 <- make_path_col(col_red,   plot_data, ranges_ord, HEIGHT_UNIT, fill_values, 2019:2023,
+                      global_ylim_path, show_y_title = FALSE)
 
 ggsave(file.path(out_dir, "pls_model_path_plot_col1.pdf"), plot = col1$plot,
-       width = 4, height = col1$height + 1.5)
+       width = 5, height = col1$height + 3)
 ggsave(file.path(out_dir, "pls_model_path_plot_col2.pdf"), plot = col2$plot,
-       width = 4, height = col2$height + 1.5)
+       width = 5, height = col2$height + 3)
 ggsave(file.path(out_dir, "pls_model_path_plot_col3.pdf"), plot = col3$plot,
-       width = 4, height = col3$height + 1.5)
+       width = 5, height = col3$height + 3)
 cat("Saved: pls_model_path_plot_col1/2/3.pdf\n")
 
 # ============================================================================

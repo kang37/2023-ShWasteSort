@@ -16,32 +16,32 @@ if (!exists("out_dir")) {
 }
 
 selected_model_labels <- c(
-  "M_base" = "Base model",
-  "M_spill_direct" = "Behavior-spillover model"
+  "M_base" = "Base\nmodel",
+  "M_spill_direct" = "Behavior-\nspillover"
 )
 
 selected_path_labels <- c(
-  "DESC_NORM->ATT"             = "SN\n→ ATT",
-  "DESC_NORM->PBC"             = "SN\n→ PBC",
-  "PBC->ATT"                   = "PBC\n→ ATT",
-  "DESC_NORM->wil_of_engage"   = "SN\n→ BI",
-  "PBC->wil_of_engage"         = "PBC\n→ BI",
-  "ATT->wil_of_engage"         = "ATT\n→ BI",
-  "wil_of_engage->seper_recyc" = "BI\n→ BEH",
-  "PBC->seper_recyc"           = "PBC\n→ BEH",
-  "GreenBehav->seper_recyc"    = "HPEB\n→ BEH"
+  "DESC_NORM->ATT"             = "SN → ATT",
+  "DESC_NORM->PBC"             = "SN → PBC",
+  "PBC->ATT"                   = "PBC → ATT",
+  "DESC_NORM->wil_of_engage"   = "SN → BI",
+  "PBC->wil_of_engage"         = "PBC → BI",
+  "ATT->wil_of_engage"         = "ATT → BI",
+  "wil_of_engage->seper_recyc" = "BI → BEH",
+  "PBC->seper_recyc"           = "PBC → BEH",
+  "GreenBehav->seper_recyc"    = "HPEB → BEH"
 )
 
 selected_path_colors <- c(
-  "SN\n→ ATT"   = "#2166AC",
-  "SN\n→ PBC"   = "#4393C3",
-  "PBC\n→ ATT"  = "#92C5DE",
-  "SN\n→ BI"    = "#1B7837",
-  "PBC\n→ BI"   = "#5AAE61",
-  "ATT\n→ BI"   = "#A6D96A",
-  "BI\n→ BEH"   = "#D73027",
-  "PBC\n→ BEH"  = "#F46D43",
-  "HPEB\n→ BEH" = "#762A83"
+  "SN → ATT"   = "#2166AC",
+  "SN → PBC"   = "#4393C3",
+  "PBC → ATT"  = "#92C5DE",
+  "SN → BI"    = "#1B7837",
+  "PBC → BI"   = "#5AAE61",
+  "ATT → BI"   = "#A6D96A",
+  "BI → BEH"   = "#D73027",
+  "PBC → BEH"  = "#F46D43",
+  "HPEB → BEH" = "#762A83"
 )
 
 selected_path_order <- names(selected_path_colors)
@@ -85,13 +85,14 @@ selected_models_path_plot <- ggplot(
     subtitle = NULL,
     x = "Year", y = "Standardized path\ncoefficient"
   ) +
-  theme_classic(base_size = 18) +
+  theme_classic(base_size = 27) +
   theme(
     axis.text.x = element_text(angle = 90, vjust = .5, hjust = 1),
-    strip.text.x = element_text(size = 16),
-    strip.text.y = element_text(size = 18, face = "plain"),
-    strip.background = element_rect(fill = "gray92", color = "gray60"),
-    panel.border = element_rect(color = "gray70", fill = NA, linewidth = .7),
+    strip.text.x = element_text(size = 24),
+    strip.text.y = element_text(size = 27, face = "plain", angle = 0),
+    strip.background = element_rect(fill = "gray92", color = "black", linewidth = 1),
+    axis.line = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
     legend.position = "bottom",
     panel.spacing = grid::unit(.12, "lines")
   )

@@ -4,7 +4,7 @@
 library(png)
 library(grid)
 
-source_dir <- file.path("data_proc", "result_20260816")
+source_dir <- file.path("data_proc", "result_20260921")
 out_dir <- file.path("data_proc", "result_20260921")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
