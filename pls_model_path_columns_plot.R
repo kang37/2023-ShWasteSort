@@ -81,7 +81,9 @@ make_path_col <- function(paths, show_y_title = TRUE) {
     labs(x = "Year", y = if (show_y_title) "Standardized Coefficient" else NULL) +
     theme_classic(base_size = 18) +
     theme(
-      axis.text.x = element_text(angle = 90),
+      axis.text.x = element_text(size = 18, angle = 90),
+      axis.text.y = element_text(size = 18),
+      axis.title = element_text(size = 18),
       strip.text = element_text(size = 18),
       strip.background = element_rect(fill = "gray85", color = "gray50"),
       panel.border = element_rect(color = "gray50", fill = NA, linewidth = .5)
