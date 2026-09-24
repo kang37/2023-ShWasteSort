@@ -7,3 +7,4 @@ data_proc/
 file/
 note/
 .DS_Store
+.claude/
