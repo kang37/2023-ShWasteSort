@@ -7,8 +7,11 @@ library(ggh4x)
 library(grid)
 
 input_file <- file.path("data_proc", "result_20260816", "pls_sem_path_coefficients.csv")
+mga_file <- file.path("data_proc", "result_20260816", "pls_mga_all_pairs.csv")
 out_dir <- file.path("data_proc", "result_20260921")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+add_mga_brackets <- identical(Sys.getenv("PLS_ADD_MGA"), "1")
+file_suffix <- if (add_mga_brackets) "_mga" else ""
 
 path_results <- read.csv(input_file, stringsAsFactors = FALSE)
 
@@ -47,9 +50,39 @@ plot_data <- path_results %>%
     point_fill = if_else(significant, as.character(Path_full), "ns")
   )
 
-global_ylim <- range(c(plot_data$ci_low, plot_data$ci_high), na.rm = TRUE)
-global_pad <- diff(global_ylim) * .08
-global_ylim <- global_ylim + c(-global_pad, global_pad)
+data_range <- range(c(plot_data$ci_low, plot_data$ci_high), na.rm = TRUE)
+data_span <- diff(data_range)
+
+mga_brackets <- data.frame()
+if (add_mga_brackets) {
+  path_tops <- plot_data %>%
+    group_by(Path_full) %>%
+    summarise(path_top = max(ci_high, na.rm = TRUE), .groups = "drop") %>%
+    mutate(Path_full = as.character(Path_full))
+
+  mga_brackets <- read.csv(mga_file, stringsAsFactors = FALSE) %>%
+    filter(nzchar(sig)) %>%
+    mutate(
+      path_key = paste0(source, "->", target),
+      Path_full = unname(path_labels[path_key]),
+      year_a = as.numeric(year_a),
+      year_b = as.numeric(year_b)
+    ) %>%
+    filter(!is.na(Path_full)) %>%
+    left_join(path_tops, by = "Path_full") %>%
+    group_by(Path_full) %>%
+    arrange(year_a, year_b, .by_group = TRUE) %>%
+    mutate(
+      bracket_y = path_top + row_number() * .075 * data_span,
+      bracket_end = bracket_y - .035 * data_span
+    ) %>%
+    ungroup()
+}
+
+global_ylim <- data_range + c(-.08, .08) * data_span
+if (nrow(mga_brackets) > 0) {
+  global_ylim[2] <- max(global_ylim[2], max(mga_brackets$bracket_y) + .04 * data_span)
+}
 height_unit <- 1.35
 panel_height <- diff(global_ylim) * height_unit
 fill_values <- c(path_colors, ns = "white")
@@ -66,12 +99,37 @@ make_path_col <- function(paths, show_y_title = TRUE) {
     n_panels
   )
 
+  bracket_data <- mga_brackets %>%
+    filter(Path_full %in% paths) %>%
+    mutate(Path_full = factor(Path_full, levels = paths))
+
   plot <- ggplot(d, aes(x = year_num, y = beta, color = Path_full)) +
     geom_hline(yintercept = 0, linetype = "dashed", color = "gray40", linewidth = .4) +
     geom_ribbon(aes(ymin = ci_low, ymax = ci_high, fill = Path_full),
                 alpha = .12, color = NA) +
     geom_line(linewidth = .9) +
-    geom_point(aes(fill = point_fill), shape = 21, size = 3.5, stroke = 1) +
+    geom_point(aes(fill = point_fill), shape = 21, size = 3.5, stroke = 1)
+
+  if (nrow(bracket_data) > 0) {
+    plot <- plot +
+      geom_segment(
+        data = bracket_data,
+        aes(x = year_a, xend = year_b, y = bracket_y, yend = bracket_y),
+        inherit.aes = FALSE, color = "black", linewidth = 1
+      ) +
+      geom_segment(
+        data = bracket_data,
+        aes(x = year_a, xend = year_a, y = bracket_y, yend = bracket_end),
+        inherit.aes = FALSE, color = "black", linewidth = 1
+      ) +
+      geom_segment(
+        data = bracket_data,
+        aes(x = year_b, xend = year_b, y = bracket_y, yend = bracket_end),
+        inherit.aes = FALSE, color = "black", linewidth = 1
+      )
+  }
+
+  plot <- plot +
     facet_wrap(~ Path_full, ncol = 1, scales = "free_y") +
     facetted_pos_scales(y = y_scales) +
     force_panelsizes(rows = unit(rep(panel_height, n_panels), "in")) +
@@ -100,11 +158,11 @@ columns <- list(
 
 for (i in seq_along(columns)) {
   ggsave(
-    file.path(out_dir, paste0("pls_model_path_plot_col", i, ".pdf")),
+    file.path(out_dir, paste0("pls_model_path_plot_col", i, file_suffix, ".pdf")),
     plot = columns[[i]]$plot,
     width = 6,
     height = columns[[i]]$height + 3.6
   )
 }
 
-cat("Saved updated PLS path plot columns to:", out_dir, "\n")
+cat("Saved updated PLS path plot columns", file_suffix, "to:", out_dir, "\n")

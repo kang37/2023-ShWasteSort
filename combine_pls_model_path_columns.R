@@ -7,10 +7,11 @@ library(grid)
 source_dir <- file.path("data_proc", "result_20260921")
 out_dir <- file.path("data_proc", "result_20260921")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+file_suffix <- Sys.getenv("PLS_COMBINE_SUFFIX")
 
 source_files <- file.path(
   source_dir,
-  paste0("pls_model_path_plot_col", 1:3, ".pdf")
+  paste0("pls_model_path_plot_col", 1:3, file_suffix, ".pdf")
 )
 
 stopifnot(all(file.exists(source_files)))
@@ -84,8 +85,8 @@ for (panel in panels) {
   x_start <- x_end + 1L
 }
 
-png_path <- file.path(out_dir, "pls_model_path_plot_combined.png")
-pdf_path <- file.path(out_dir, "pls_model_path_plot_combined.pdf")
+png_path <- file.path(out_dir, paste0("pls_model_path_plot_combined", file_suffix, ".png"))
+pdf_path <- file.path(out_dir, paste0("pls_model_path_plot_combined", file_suffix, ".pdf"))
 
 writePNG(combined, png_path)
 
