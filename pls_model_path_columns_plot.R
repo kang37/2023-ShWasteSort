@@ -50,7 +50,7 @@ plot_data <- path_results %>%
 global_ylim <- range(c(plot_data$ci_low, plot_data$ci_high), na.rm = TRUE)
 global_pad <- diff(global_ylim) * .08
 global_ylim <- global_ylim + c(-global_pad, global_pad)
-height_unit <- 1.6
+height_unit <- 1.35
 panel_height <- diff(global_ylim) * height_unit
 fill_values <- c(path_colors, ns = "white")
 
@@ -79,12 +79,12 @@ make_path_col <- function(paths, show_y_title = TRUE) {
     scale_color_manual(values = path_colors, guide = "none") +
     scale_fill_manual(values = fill_values, guide = "none") +
     labs(x = "Year", y = if (show_y_title) "Standardized Coefficient" else NULL) +
-    theme_classic(base_size = 18) +
+    theme_classic(base_size = 24) +
     theme(
-      axis.text.x = element_text(size = 18, angle = 90),
-      axis.text.y = element_text(size = 18),
-      axis.title = element_text(size = 18),
-      strip.text = element_text(size = 18),
+      axis.text.x = element_text(size = 24, angle = 90),
+      axis.text.y = element_text(size = 24),
+      axis.title = element_text(size = 24),
+      strip.text = element_text(size = 24),
       strip.background = element_rect(fill = "gray85", color = "gray50"),
       panel.border = element_rect(color = "gray50", fill = NA, linewidth = .5)
     )
@@ -102,8 +102,8 @@ for (i in seq_along(columns)) {
   ggsave(
     file.path(out_dir, paste0("pls_model_path_plot_col", i, ".pdf")),
     plot = columns[[i]]$plot,
-    width = 5,
-    height = columns[[i]]$height + 3
+    width = 6,
+    height = columns[[i]]$height + 3.6
   )
 }
 

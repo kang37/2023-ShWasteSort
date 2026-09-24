@@ -31,6 +31,31 @@ for (i in seq_along(source_files)) {
 }
 
 panels <- lapply(png_files, readPNG)
+
+# Align the visible plot regions rather than the PDF page boundaries. Different
+# numbers of facets can cause ggplot to leave different amounts of top margin.
+first_ink_row <- function(x, threshold = .99) {
+  rgb <- x[, , seq_len(min(3, dim(x)[3])), drop = FALSE]
+  ink_by_row <- apply(rgb < threshold, 1, any)
+  match(TRUE, ink_by_row)
+}
+
+top_rows <- vapply(panels, first_ink_row, integer(1))
+panels <- Map(
+  function(x, first_row) x[first_row:dim(x)[1], , , drop = FALSE],
+  panels,
+  top_rows
+)
+
+# Retain a small common margin after content alignment so the top strips do not
+# touch the image boundary.
+top_padding <- 40L
+panels <- lapply(panels, function(x) {
+  padded <- array(1, dim = c(top_padding + dim(x)[1], dim(x)[2], dim(x)[3]))
+  padded[(top_padding + 1L):dim(padded)[1], , ] <- x
+  padded
+})
+
 target_height <- max(vapply(panels, function(x) dim(x)[1], integer(1)))
 target_channels <- max(vapply(panels, function(x) dim(x)[3], integer(1)))
 

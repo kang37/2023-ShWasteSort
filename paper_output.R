@@ -668,7 +668,7 @@ path_ranges <- plot_data %>%
   )
 
 # 面板高度与y轴跨度成正比 → 统一比例尺（HEIGHT_UNIT英寸/单位）
-HEIGHT_UNIT   <- 1.6
+HEIGHT_UNIT   <- 1.35
 path_order    <- levels(plot_data$Path_full)
 ranges_ord    <- path_ranges[match(path_order, path_ranges$Path_full), ]
 panel_heights <- ranges_ord$span * HEIGHT_UNIT
@@ -722,12 +722,12 @@ make_path_col <- function(paths_in_col, data, ranges, HEIGHT_UNIT, fill_values, 
     scale_color_manual(values = path_colors, guide = "none") +
     scale_fill_manual(values = fill_values, guide = "none") +
     labs(x = "Year", y = if (show_y_title) "Standardized Coefficient" else NULL) +
-    theme_classic(base_size = 18) +
+    theme_classic(base_size = 24) +
     theme(
-      axis.text.x      = element_text(size = 18, angle = 90),
-      axis.text.y      = element_text(size = 18),
-      axis.title       = element_text(size = 18),
-      strip.text       = element_text(size = 18),
+      axis.text.x      = element_text(size = 24, angle = 90),
+      axis.text.y      = element_text(size = 24),
+      axis.title       = element_text(size = 24),
+      strip.text       = element_text(size = 24),
       strip.background = element_rect(fill = "gray85", color = "gray50"),
       panel.border     = element_rect(color = "gray50", fill = NA, linewidth = 0.5)
     )
@@ -747,11 +747,11 @@ col3 <- make_path_col(col_red,   plot_data, ranges_ord, HEIGHT_UNIT, fill_values
                       global_ylim_path, show_y_title = FALSE)
 
 ggsave(file.path(out_dir, "pls_model_path_plot_col1.pdf"), plot = col1$plot,
-       width = 5, height = col1$height + 3)
+       width = 6, height = col1$height + 3.6)
 ggsave(file.path(out_dir, "pls_model_path_plot_col2.pdf"), plot = col2$plot,
-       width = 5, height = col2$height + 3)
+       width = 6, height = col2$height + 3.6)
 ggsave(file.path(out_dir, "pls_model_path_plot_col3.pdf"), plot = col3$plot,
-       width = 5, height = col3$height + 3)
+       width = 6, height = col3$height + 3.6)
 cat("Saved: pls_model_path_plot_col1/2/3.pdf\n")
 
 # ============================================================================
